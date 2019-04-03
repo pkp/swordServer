@@ -12,6 +12,8 @@ Check this repo out to `plugins/gateway`:
     cd ojs_sword_server
     composer update
 
+Enable the plugin under Settings -> Website -> Plugins ->  Gateway Plugins
+
 Start OJS on `localhost:8000` using the test database.
 
 Check out the SWORD client library and run tests:
