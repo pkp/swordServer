@@ -88,8 +88,7 @@ class SwordServerPlugin extends GatewayPlugin {
 			if (!$request->isPost()) {
 				return false;
 			}
-			// Not pictured: authn / authz, actually saving submission files, etc.
-			// This is just going to create a submission and respond.
+			$headers = getallheaders();
 			$sectionId = intval(array_shift($args));
 			$submissionDao = Application::getSubmissionDAO();
 			$submission = $submissionDao->newDataObject();
@@ -102,27 +101,67 @@ class SwordServerPlugin extends GatewayPlugin {
 			$submission->setSectionId($sectionId);
 			$submission->setLocale('en_US');
 
-			file_put_contents(ini_get('upload_tmp_dir') . '/sword_upload.dat', file_get_contents('php://input'));
+			$uploadDir = ini_get('upload_tmp_dir');
+			$uploadedFilePath = $uploadDir . '/sword_upload.dat';
+			file_put_contents($uploadedFilePath, file_get_contents('php://input'));
+			if ($headers['Content-Type'] == 'application/zip' && $headers['Packaging'] == "http://purl.org/net/sword/package/METSDSpaceSIP") {
+					$zip = new ZipArchive;
+					$res = $zip->open($uploadedFilePath);
+					if ($res) {
+							$zip->extractTo($uploadDir);
+							$zip->close();
+					} else {
+							throw new Exception('Zip extraction failed');
+					}
+			}
+
+			if (!file_exists($uploadDir . "/mets.xml")) {
+					throw new Exception('No mets.xml document in extracted Zip package');
+			}
+			$metsDoc = simplexml_load_file($uploadDir . "/mets.xml");
+			$metsDoc->registerXPathNamespace("mets", 'http://www.loc.gov/METS/');
+			$metsDoc->registerXPathNamespace("epdcx", "http://purl.org/eprint/epdcx/2006-11-16/");
+			$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/" .
+															 "elements/1.1/title']/epdcx:valueString");
+			if (!empty($match)) {
+					$title = $match[0]->__toString();
+					$submission->setTitle($title, 'en_US');
+			}
 
 			$submissionId = $submissionDao->insertObject($submission);
 
-            $submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
-            $submissionFile = $submissionFileManager->uploadSubmissionFile(
-                'sword_upload.dat', 2, 1, null, 11, null, null
-            );
+			$hrefs = array_unique(
+					array_map(function($h) {
+							return $h['href']->__toString();
+					}, $metsDoc->xpath("//mets:FLocat[@LOCTYPE='URL']/@xlink:href")
+					)
+			);
+			foreach ($hrefs as $href) {
+					if (file_exists($uploadDir . "/" . $href)) {
+							$submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
+							$submissionFile = $submissionFileManager->uploadSubmissionFile(
+									$href, 2, 1, null, 11, null, null
+							);
+					}
+			}
 
-            $serverHost = $request->_serverHost;
-            $requestPath = $request->_requestPath;
-            $editIri = 'http://' . $serverHost .
-                     substr($requestPath, 0, strrpos($requestPath, "sections")) .
-                     'submissions/' . $submissionId;
+			// Attach the original package as well
+			$submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
+			$submissionFile = $submissionFileManager->uploadSubmissionFile(
+					'sword_upload.dat', 2, 1, null, 11, null, null
+			);
 
-			// file_put_contents('/tmp/test.txt', file_get_contents('php://input'));
+			$serverHost = $request->_serverHost;
+			$requestPath = $request->_requestPath;
+			$editIri = 'http://' . $serverHost .
+							 substr($requestPath, 0, strrpos($requestPath, "sections")) .
+							 'submissions/' . $submissionId;
+
 			$depositReceipt = new DepositReceipt(
-				[
-                    'title' => $submission->getTitle('en_US'),
-                    'edit-iri' => $editIri
-                ]
+					[
+							'title' => $submission->getTitle('en_US'),
+							'edit-iri' => $editIri
+					]
 			);
 			header('Content-Type: application/xml');
 			echo $depositReceipt->saveXML();

@@ -10,6 +10,7 @@ Check this repo out to `plugins/gateway`:
     cd <path_to_ojs_root>/plugins/gateway
     git clone https://github.com/quoideneuf/ojs_sword_server
     cd ojs_sword_server
+    git clone https://github.com/swordapp/swordappv2-php-library
     composer update
 
 Enable the plugin under Settings -> Website -> Plugins ->  Gateway Plugins
