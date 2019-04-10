@@ -18,6 +18,7 @@ import('classes.journal.SectionDAO');
 import('classes.article.ArticleDAO');
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
+require __DIR__ . '/SwordError.inc.php';
 require __DIR__ . '/SwordSubmissionFileManager.inc.php';
 
 
@@ -88,6 +89,26 @@ class SwordServerPlugin extends GatewayPlugin {
 			if (!$request->isPost()) {
 				return false;
 			}
+
+			$headers = getallheaders();
+			if (!array_key_exists('Authorization', $headers)) {
+				$this->errorResponse(401, "No Authorization header sent with request");
+			}
+
+			$auth_header = $headers["Authorization"];
+			$userPass = base64_decode(substr($auth_header, 6));
+			$userPass = explode(":", $userPass);
+
+			if (!Validation::checkCredentials($userPass[0], $userPass[1])) {
+				$this->errorResponse(401, "Unauthorized");
+			}
+
+			$userDao = new UserDao();
+			$user = $userDao->getByUsername($userPass[0]);
+			if (! $user->hasRole(ROLE_ID_MANAGER, $request->getJournal()->getId())) {
+				$this->errorResponse(401, "Unauthorized");
+			}
+
 			$headers = getallheaders();
 			$sectionId = intval(array_shift($args));
 			$submissionDao = Application::getSubmissionDAO();
@@ -105,18 +126,18 @@ class SwordServerPlugin extends GatewayPlugin {
 			$uploadedFilePath = $uploadDir . '/sword_upload.dat';
 			file_put_contents($uploadedFilePath, file_get_contents('php://input'));
 			if ($headers['Content-Type'] == 'application/zip' && $headers['Packaging'] == "http://purl.org/net/sword/package/METSDSpaceSIP") {
-					$zip = new ZipArchive;
-					$res = $zip->open($uploadedFilePath);
-					if ($res) {
-							$zip->extractTo($uploadDir);
-							$zip->close();
-					} else {
-							throw new Exception('Zip extraction failed');
-					}
+				$zip = new ZipArchive;
+				$res = $zip->open($uploadedFilePath);
+				if ($res) {
+					$zip->extractTo($uploadDir);
+					$zip->close();
+				} else {
+					throw new Exception('Zip extraction failed');
+				}
 			}
 
 			if (!file_exists($uploadDir . "/mets.xml")) {
-					throw new Exception('No mets.xml document in extracted Zip package');
+				throw new Exception('No mets.xml document in extracted Zip package');
 			}
 			$metsDoc = simplexml_load_file($uploadDir . "/mets.xml");
 			$metsDoc->registerXPathNamespace("mets", 'http://www.loc.gov/METS/');
@@ -124,44 +145,44 @@ class SwordServerPlugin extends GatewayPlugin {
 			$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/" .
 															 "elements/1.1/title']/epdcx:valueString");
 			if (!empty($match)) {
-					$title = $match[0]->__toString();
-					$submission->setTitle($title, 'en_US');
+				$title = $match[0]->__toString();
+				$submission->setTitle($title, 'en_US');
 			}
 
 			$submissionId = $submissionDao->insertObject($submission);
 
 			$hrefs = array_unique(
-					array_map(function($h) {
-							return $h['href']->__toString();
-					}, $metsDoc->xpath("//mets:FLocat[@LOCTYPE='URL']/@xlink:href")
-					)
+				array_map(function($h) {
+					return $h['href']->__toString();
+				}, $metsDoc->xpath("//mets:FLocat[@LOCTYPE='URL']/@xlink:href")
+				)
 			);
 			foreach ($hrefs as $href) {
-					if (file_exists($uploadDir . "/" . $href)) {
-							$submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
-							$submissionFile = $submissionFileManager->uploadSubmissionFile(
-									$href, 2, 1, null, 11, null, null
-							);
-					}
+				if (file_exists($uploadDir . "/" . $href)) {
+					$submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
+					$submissionFile = $submissionFileManager->uploadSubmissionFile(
+						$href, 2, 1, null, 11, null, null
+					);
+				}
 			}
 
 			// Attach the original package as well
 			$submissionFileManager = new SwordSubmissionFileManager($request->getJournal()->getId(), $submissionId);
 			$submissionFile = $submissionFileManager->uploadSubmissionFile(
-					'sword_upload.dat', 2, 1, null, 11, null, null
+				'sword_upload.dat', 2, 1, null, 11, null, null
 			);
 
 			$serverHost = $request->_serverHost;
 			$requestPath = $request->_requestPath;
 			$editIri = 'http://' . $serverHost .
-							 substr($requestPath, 0, strrpos($requestPath, "sections")) .
-							 'submissions/' . $submissionId;
+					 substr($requestPath, 0, strrpos($requestPath, "sections")) .
+					 'submissions/' . $submissionId;
 
 			$depositReceipt = new DepositReceipt(
-					[
-							'title' => $submission->getTitle('en_US'),
-							'edit-iri' => $editIri
-					]
+				[
+					'title' => $submission->getTitle('en_US'),
+					'edit-iri' => $editIri
+				]
 			);
 			header('Content-Type: application/xml');
 			echo $depositReceipt->saveXML();
@@ -174,6 +195,23 @@ class SwordServerPlugin extends GatewayPlugin {
 		AppLocale::requireComponents(LOCALE_COMPONENT_APP_COMMON);
 		$templateMgr->assign('message', 'plugins.gateways.swordserver.errors.errorMessage');
 		$templateMgr->display('frontend/pages/message.tpl');
+		exit;
+	}
+
+	function errorResponse($httpCode, $errorSummary, $errorType = null) {
+		$swordError = new SwordError([
+			'summary' => $errorSummary
+		]);
+		header('Content-Type: application/xml');
+
+		switch ($httpCode) {
+		case 401:
+			header("HTTP/1.1 401 Unauthorized");
+			break;
+		default:
+			header("HTTP/1.1 500 Server Error");
+		}
+		echo $swordError->saveXML();
 		exit;
 	}
 }
