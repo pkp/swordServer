@@ -16,13 +16,16 @@
 import('lib.pkp.classes.plugins.GatewayPlugin');
 import('classes.journal.SectionDAO');
 import('classes.article.ArticleDAO');
+import('lib.pkp.classes.security.authorization.PolicySet');
+
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
 require __DIR__ . '/SwordSubmissionFileManager.inc.php';
 require __DIR__ . '/SwordServerAccessPolicy.inc.php';
+require __DIR__ . '/SwordServerApiKeyPolicy.inc.php';
+require __DIR__ . '/SwordError.inc.php';
 
 class SwordServerPlugin extends GatewayPlugin {
-
 
 	function __construct() {
 		parent::__construct();
@@ -76,8 +79,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		return __('plugins.gateways.swordserver.description');
 	}
 
-	function addPolicies($request) {
-		yield new SwordServerAccessPolicy($request, );
+	function getPolicies($request) {
+		yield new SwordServerAccessPolicy($request);
 	}
 
 	function serviceDocument() {
@@ -186,7 +189,8 @@ class SwordServerPlugin extends GatewayPlugin {
 			return false;
 		}
 		$this->request = $request;
-
+		$handler = $request->_router->getHandler();
+		$user = $handler->getAuthorizedContextObject(ASSOC_TYPE_USER);
 		$route = (array_shift($args));
 		$method = $request->getRequestMethod();
 		$methodsAllowed = [];

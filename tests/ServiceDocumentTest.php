@@ -14,8 +14,8 @@ class ServiceDocumentTest extends PHPUnit\Framework\TestCase
 
         $this->doc = $this->sac->servicedocument(
             $this->endpoint_url . '/servicedocument',
-            'whoever',
-            'doesntmatter',
+            'admin',
+            'admin',
             ''
         );
         $this->workspace = $this->doc->sac_workspaces[0];

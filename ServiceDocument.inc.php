@@ -27,13 +27,12 @@ class ServiceDocument extends DOMDocument {
 		$root->appendChild($this->createElement('sword:version', '2.0'));
 		$workspace = $this->createElement('workspace');
 		$root->appendChild($workspace);
-
 		$workspace->appendChild($this->createElement('atom:title', $journal->getLocalizedPageHeaderTitle()));
 		foreach ($sections as $key => $section) {
 			$collection = $this->createElement('collection');
 			$href_attr = new DOMAttr('href', $baseUrl . "/sections/" . $section->_data['id']);
 			$collection->appendChild($href_attr);
-			$collection->appendChild($this->createElement('atom:title', $journal->getLocalizedPageHeaderTitle()));
+			$collection->appendChild($this->createElement('atom:title', $section->getLocalizedTitle()));
 			$collection->appendChild($this->createElement('accept', '*/*'));
 			$accept2 = $this->createElement('accept', '*/*');
 			$accept2_attr = new DOMAttr('alternate', 'multipart-related');
@@ -41,6 +40,5 @@ class ServiceDocument extends DOMDocument {
 			$collection->appendChild($accept2);
 			$workspace->appendChild($collection);
 		}
-
 	}
 }
