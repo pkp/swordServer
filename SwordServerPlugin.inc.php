@@ -20,6 +20,7 @@ import('lib.pkp.classes.security.authorization.PolicySet');
 
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
+require __DIR__ . '/SwordStatement.inc.php';
 require __DIR__ . '/SwordSubmissionFileManager.inc.php';
 require __DIR__ . '/SwordServerAccessPolicy.inc.php';
 require __DIR__ . '/SwordServerApiKeyPolicy.inc.php';
@@ -40,6 +41,11 @@ class SwordServerPlugin extends GatewayPlugin {
 				'pattern' => 'sections/{id}',
 				'method' => 'POST',
 				'handler' => [$this, 'deposit']
+			],
+			[
+				'pattern' => 'submissions/{id}/statement',
+				'method' => 'GET',
+				'handler' => [$this, 'statement']
 			]
 		];
 	}
@@ -99,9 +105,9 @@ class SwordServerPlugin extends GatewayPlugin {
 		exit;
 	}
 
-	function deposit($args) {
+	function deposit($opts) {
 		$headers = getallheaders();
-		$sectionId = intval(array_shift($args));
+		$sectionId = intval($opts['id']);
 		$submissionDao = Application::getSubmissionDAO();
 		$submission = $submissionDao->newDataObject();
 		$submission->setContextId($this->request->getJournal()->getId());
@@ -169,14 +175,35 @@ class SwordServerPlugin extends GatewayPlugin {
 				 substr($requestPath, 0, strrpos($requestPath, "sections")) .
 				 'submissions/' . $submissionId;
 
+		$stmtIri = 'http://' . $serverHost .
+				 substr($requestPath, 0, strrpos($requestPath, "sections")) .
+				 'submissions/' . $submissionId . '/statement';
+
 		$depositReceipt = new DepositReceipt(
 			[
 				'title' => $submission->getTitle('en_US'),
-				'edit-iri' => $editIri
+				'edit-iri' => $editIri,
+				'stmt-iri' => $stmtIri,
 			]
 		);
 		header('Content-Type: application/xml');
 		echo $depositReceipt->saveXML();
+		exit;
+	}
+
+	function statement($opts) {
+		$submissionDao = Application::getSubmissionDAO();
+		$submission = $submissionDao->getById($opts['id']);
+
+		$swordStatement = new SwordStatement(
+			[
+				'state_href' => $this->_getStateIRI(),
+				'state_description' => "Deposited to " . $submission->getSectionTitle(),
+			]
+		);
+
+		header('Content-Type: application/xml');
+		echo $swordStatement->saveXML();
 		exit;
 	}
 
@@ -188,16 +215,16 @@ class SwordServerPlugin extends GatewayPlugin {
 		if (!$this->getEnabled()) {
 			return false;
 		}
+
 		$this->request = $request;
 		$handler = $request->_router->getHandler();
 		$user = $handler->getAuthorizedContextObject(ASSOC_TYPE_USER);
-		$route = (array_shift($args));
 		$method = $request->getRequestMethod();
 		$methodsAllowed = [];
 		foreach ($this->_endpoints as $endpoint) {
-			if (substr($endpoint['pattern'], 0, strlen($route)) == $route) {
+			if ($opts = $this->_matchRoute($args, $endpoint['pattern'])) {
 				if ($method == $endpoint['method']) {
-					call_user_func($endpoint['handler'], $args);
+					call_user_func($endpoint['handler'], $opts);
 					break;
 				}
 				array_push($methodsAllowed, $endpoint['method']);
@@ -226,4 +253,31 @@ class SwordServerPlugin extends GatewayPlugin {
 		}
 	}
 
+
+	function _matchRoute($args, $test, $opts = []) {
+		if ($pos = strpos($test, '/')) {
+			$rest = substr($test, $pos);
+			$test = substr($test, 0, $pos);
+		} else {
+			$rest = false;
+		}
+		if (preg_match('/{([a-z]*)}/', $test, $sp)) {
+			$opts[$sp[1]] = array_shift($args);
+		} else if (array_shift($args) != $test) {
+			return false;
+		}
+		if ($rest) {
+			return $this->_matchRoute($args, substr($rest, 1), $opts);
+		} else if ($opts){
+			return $opts;
+		}
+		return true;
+	}
+
+	function _getStateIRI() {
+		return $this->request->_protocol
+			. '://'
+			. $this->request->_serverHost
+			. $this->request->_requestPath;
+	}
 }

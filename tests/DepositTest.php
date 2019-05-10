@@ -17,17 +17,20 @@ class DepositTest extends PHPUnit\Framework\TestCase
 	}
 
 	public function testBasicDeposit() {
+		$user = 'admin';
+		$password = 'admin';
 		$path = dirname(__FILE__) . '/mets-and-pdf-deposit.zip';
 		$response = $this->sac->deposit(
 			$this->coll_url,
-			'admin',
-			'admin',
+			$user,
+			$password,
 			'',
 			$path,
 			'http://purl.org/net/sword/package/METSDSpaceSIP',
 			'application/zip', false, true
 		);
 
+		// DepositReceipt
 		$this->assertEquals(
 			$response->sac_title,
 			"Cyclomatic Complexity: theme and variations"
@@ -38,9 +41,21 @@ class DepositTest extends PHPUnit\Framework\TestCase
 		$add_link = array_filter($response->sac_links, function($link) { return $link->sac_linkrel == 'http://purl.org/net/sword/terms/add'; });
 		$this->assertCount(1, $add_link);
 
+		$stmt_links = array_filter($response->sac_links, function($link) { return $link->sac_linkrel == 'http://purl.org/net/sword/terms/statement'; });
+		$this->assertCount(1, $stmt_links);
+
 		$this->assertEquals(
 			$response->sac_treatment,
 			"Posted to the Article Submission Queue"
+		);
+
+		// SwordStatement
+		$stmt_link = array_shift($stmt_links);
+		$stmt_href = $stmt_link->sac_linkhref->__toString();
+		$stmt = $this->sac->retrieveAtomStatement($stmt_href, $user, $password, '');
+		$this->assertEquals(
+			$stmt->sac_state_description->__toString(),
+			"Deposited to Articles"
 		);
 	}
 
