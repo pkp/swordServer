@@ -16,10 +16,17 @@ use \Firebase\JWT\JWT;
 
 class SwordServerAccessPolicy extends AuthorizationPolicy {
 
+	/**
+	 * Constructor
+	 * @param $request PKPRequest
+	 */
 	function __construct($request) {
 		$this->request = $request;
 	}
 
+	/**
+	 * Serve a SWORD Error Document to unauthorized requests
+	 */
 	function unauthorizedResponse() {
 		$swordError = new SwordError([
 			'summary' => "You are not authorized to make this request"
@@ -31,6 +38,9 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		exit;
 	}
 
+	/**
+	 * @copydoc AuthorizationPolicy::effect()
+	 */
 	function effect() {
 		$callOnDeny = array($this, 'unauthorizedResponse', array());
 		$this->setAdvice(AUTHORIZATION_ADVICE_CALL_ON_DENY, $callOnDeny);
@@ -47,8 +57,8 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 			}
 		}
 		// 2. Try API Key
-		if (!$user && $apiToken = $this->request->getUserVar('apiToken')) {
-			$secret = Config::getVar('security', 'api_key_secret', '');
+		if (!$user && $apiToken = $headers['X-Ojs-Sword-Api-Token']) {
+				$secret = Config::getVar('security', 'api_key_secret', '');
 			try {
 				$decoded = json_decode(JWT::decode($apiToken, $secret, array('HS256')));
 				$userDao = DAORegistry::getDAO('UserDAO');
@@ -58,7 +68,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		}
 		
 		if ($user && $user->hasRole(ROLE_ID_MANAGER, $this->request->getJournal()->getId())) {
-			//$this->addAuthorizedContextObject(ASSOC_TYPE_USER, $user);
+			$this->addAuthorizedContextObject(ASSOC_TYPE_USER, $user);
 			return AUTHORIZATION_PERMIT;
 		}
 		return AUTHORIZATION_DENY;

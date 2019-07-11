@@ -15,6 +15,10 @@
 
 class SwordError extends DOMDocument {
 
+	/**
+	 * Constructor.
+	 * @param $data array
+	 */
 	function __construct($data) {
 		parent::__construct();
 		$root = $this->createElementNS('http://purl.org/net/sword', 'sword:error') ;

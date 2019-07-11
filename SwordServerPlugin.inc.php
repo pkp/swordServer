@@ -14,20 +14,21 @@
  */
 
 import('lib.pkp.classes.plugins.GatewayPlugin');
-import('classes.journal.SectionDAO');
-import('classes.article.ArticleDAO');
 import('lib.pkp.classes.security.authorization.PolicySet');
+import('lib.pkp.classes.submission.Genre');
 
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
 require __DIR__ . '/SwordStatement.inc.php';
 require __DIR__ . '/SwordSubmissionFileManager.inc.php';
 require __DIR__ . '/SwordServerAccessPolicy.inc.php';
-require __DIR__ . '/SwordServerApiKeyPolicy.inc.php';
 require __DIR__ . '/SwordError.inc.php';
 
 class SwordServerPlugin extends GatewayPlugin {
 
+	/**
+	 * @copydoc Plugin::__construct()
+	 */
 	function __construct() {
 		parent::__construct();
 
@@ -69,30 +70,40 @@ class SwordServerPlugin extends GatewayPlugin {
 	}
 
 	/**
-	 * Get the name of this plugin. The name must be unique within
-	 * its category.
-	 * @return String name of plugin
+	 * @copydoc Plugin::getName()
 	 */
 	function getName() {
 		return 'swordserver';
 	}
 
+	/**
+	 * @copydoc Plugin::getDisplayName()
+	 */
 	function getDisplayName() {
 		return __('plugins.gateways.swordserver.displayName');
 	}
 
+	/**
+	 * @copydoc Plugin::getDescription()
+	 */
 	function getDescription() {
 		return __('plugins.gateways.swordserver.description');
 	}
 
+	/**
+	 * @copydoc GatewayPlugin::getPolicies()
+	 */
 	function getPolicies($request) {
 		yield new SwordServerAccessPolicy($request);
 	}
 
+	/**
+	 * Serve a SWORD Service Document
+	 */
 	function serviceDocument() {
 		$journal = $this->request->getJournal();
 		$journalId = $journal->getId();
-		$sectionDAO = new SectionDAO();
+		$sectionDAO = DAORegistry::getDAO('SectionDAO');
 		$resultSet = $sectionDAO->getByJournalId($journalId);
 		$sections = $resultSet->toAssociativeArray();
 		$serviceDocument = new ServiceDocument(
@@ -105,6 +116,11 @@ class SwordServerPlugin extends GatewayPlugin {
 		exit;
 	}
 
+	/**
+	 * Handle a SWORD Deposit request
+	 *
+	 * @param $opts array
+	 */
 	function deposit($opts) {
 		$headers = getallheaders();
 		$sectionId = intval($opts['id']);
@@ -119,7 +135,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setSectionId($sectionId);
 		$submission->setLocale('en_US');
 
-		$uploadDir = ini_get('upload_tmp_dir');
+		$uploadDir = ini_get('upload_tmp_dir') . '/' . uniqid();
+		mkdir($uploadDir, DIRECTORY_MODE_MASK);
 		$uploadedFilePath = $uploadDir . '/sword_upload.dat';
 		file_put_contents($uploadedFilePath, file_get_contents('php://input'));
 		if ($headers['Content-Type'] == 'application/zip' && $headers['Packaging'] == "http://purl.org/net/sword/package/METSDSpaceSIP") {
@@ -147,37 +164,31 @@ class SwordServerPlugin extends GatewayPlugin {
 		}
 
 		$submissionId = $submissionDao->insertObject($submission);
-
+		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submissionId);
 		$hrefs = array_unique(
 			array_map(function($h) {
 				return $h['href']->__toString();
 			}, $metsDoc->xpath("//mets:FLocat[@LOCTYPE='URL']/@xlink:href")
 			)
 		);
+
 		foreach ($hrefs as $href) {
 			if (file_exists($uploadDir . "/" . $href)) {
-				$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submissionId);
 				$submissionFile = $submissionFileManager->uploadSubmissionFile(
-					$href, 2, 1, null, 11, null, null
+					$href, SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
 				);
 			}
 		}
 
 		// Attach the original package as well
-		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submissionId);
 		$submissionFile = $submissionFileManager->uploadSubmissionFile(
-			'sword_upload.dat', 2, 1, null, 11, null, null
+			'sword_upload.dat', SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
 		);
 
 		$serverHost = $this->request->_serverHost;
 		$requestPath = $this->request->_requestPath;
-		$editIri = 'http://' . $serverHost .
-				 substr($requestPath, 0, strrpos($requestPath, "sections")) .
-				 'submissions/' . $submissionId;
-
-		$stmtIri = 'http://' . $serverHost .
-				 substr($requestPath, 0, strrpos($requestPath, "sections")) .
-				 'submissions/' . $submissionId . '/statement';
+		$editIri = $this->request->url(null, 'swordserver', 'submissions', $submissionId);
+		$stmtIri = $this->request->url(null, 'swordserver', 'submissions', [$submissionId, '/statement']);
 
 		$depositReceipt = new DepositReceipt(
 			[
@@ -186,11 +197,18 @@ class SwordServerPlugin extends GatewayPlugin {
 				'stmt-iri' => $stmtIri,
 			]
 		);
+
+		$submissionFileManager->rmtree($uploadDir);
 		header('Content-Type: application/xml');
 		echo $depositReceipt->saveXML();
 		exit;
 	}
 
+	/**
+	 * Handle a SWORD Statement request
+	 *
+	 * @param $opts array
+	 */
 	function statement($opts) {
 		$submissionDao = Application::getSubmissionDAO();
 		$submission = $submissionDao->getById($opts['id']);
@@ -207,9 +225,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		exit;
 	}
 
-
 	/**
-	 * Handle fetch requests for this plugin.
+	 * @copydoc GatewayPlugin::fetch()
 	 */
 	function fetch($args, $request) {
 		if (!$this->getEnabled()) {
@@ -218,7 +235,7 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		$this->request = $request;
 		$handler = $request->_router->getHandler();
-		$user = $handler->getAuthorizedContextObject(ASSOC_TYPE_USER);
+		$this->user = $handler->getAuthorizedContextObject(ASSOC_TYPE_USER);
 		$method = $request->getRequestMethod();
 		$methodsAllowed = [];
 		foreach ($this->_endpoints as $endpoint) {
@@ -253,7 +270,14 @@ class SwordServerPlugin extends GatewayPlugin {
 		}
 	}
 
-
+	/**
+	 * Match Gateway::fetch @args to an endpoint
+	 *
+	 * @param $args array
+	 * @param $test string
+	 * @param $opts array
+	 * @return boolean
+	 */
 	function _matchRoute($args, $test, $opts = []) {
 		if ($pos = strpos($test, '/')) {
 			$rest = substr($test, $pos);
@@ -274,6 +298,11 @@ class SwordServerPlugin extends GatewayPlugin {
 		return true;
 	}
 
+	/**
+	 * Get the IRI for the SWORD statement
+	 *
+	 * @return string SWORD Statement IRI
+	 */
 	function _getStateIRI() {
 		return $this->request->_protocol
 			. '://'

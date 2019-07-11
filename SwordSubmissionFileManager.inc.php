@@ -18,17 +18,9 @@
 import('lib.pkp.classes.file.SubmissionFileManager');
 
 class SwordSubmissionFileManager extends SubmissionFileManager {
-	/**
-	 * Constructor.
-	 * @param $contextId int
-	 * @param $submissionId int
-	 */
-	function __construct($contextId, $submissionId) {
-		parent::__construct($contextId, $submissionId);
-	}
 
 	/**
-	 * Override lib.pkp.classes.file.FileManager
+	 * @copydoc FileManager::getUploadedFileType()
 	 */
 	function getUploadedFileType($fileName) {
 		$type = PKPString::mime_content_type($fileName);
@@ -38,7 +30,7 @@ class SwordSubmissionFileManager extends SubmissionFileManager {
 	}
 
 	/**
-	 * Override lib.pkp.classes.file.SubmissionFileManager
+	 * @copydoc SubmissionFileManager::_handleUpload()
 	 */
 	function _handleUpload($fileName, $fileStage, $uploaderUserId,
 			$revisedFileId = null, $genreId = null, $assocType = null, $assocId = null) {

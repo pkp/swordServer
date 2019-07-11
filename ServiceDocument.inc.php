@@ -15,6 +15,9 @@
 
 class ServiceDocument extends DOMDocument {
 
+	/**
+	 * Constructor
+	 */
 	function __construct($journal, $sections, $url) {
 		parent::__construct();
 		$baseUrl = substr($url, 0, strrpos($url, "/"));

@@ -15,6 +15,10 @@
 
 class SwordStatement extends DOMDocument {
 
+	/**
+	 * Constructor.
+	 * @param $data array
+	 */
 	function __construct($data) {
 		parent::__construct();
 		$root = $this->createElementNS('http://www.w3.org/2005/Atom', 'feed');
