@@ -16,6 +16,7 @@
 import('lib.pkp.classes.plugins.GatewayPlugin');
 import('lib.pkp.classes.security.authorization.PolicySet');
 import('lib.pkp.classes.submission.Genre');
+import('classes.publication.Publication');
 
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
@@ -124,6 +125,7 @@ class SwordServerPlugin extends GatewayPlugin {
 	function deposit($opts) {
 		$headers = getallheaders();
 		$sectionId = intval($opts['id']);
+		$locale = Locale::getDefault();
 		$submissionDao = Application::getSubmissionDAO();
 		$submission = $submissionDao->newDataObject();
 		$submission->setContextId($this->request->getJournal()->getId());
@@ -131,9 +133,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setLastModified (Core::getCurrentDate());
 		$submission->setSubmissionProgress(0);
 		$submission->setStageId(WORKFLOW_STAGE_ID_SUBMISSION);
-		$submission->setTitle("SWORD TEST DEPOSIT " . time(), 'en_US');
 		$submission->setSectionId($sectionId);
-		$submission->setLocale('en_US');
+		$submission->setLocale($locale);
 
 		$uploadDir = ini_get('upload_tmp_dir') . '/' . uniqid();
 		mkdir($uploadDir, DIRECTORY_MODE_MASK);
@@ -164,6 +165,20 @@ class SwordServerPlugin extends GatewayPlugin {
 		}
 
 		$submissionId = $submissionDao->insertObject($submission);
+
+		$publication = new Publication();
+		$publication->setData('submissionId', $submissionId);
+		$publication->setData('locale', 'en_US');
+		$publication->setData('language', PKPString::substr('en_US', 0, 2));
+		$publication->setData('sectionId', $this->request->getJournal()->getId());
+		$publication->setData('status', STATUS_QUEUED);
+		if (!empty($match)) {
+			$title = $match[0]->__toString();
+			$publication->setData('title', $title);
+		}
+		$publication = Services::get('publication')->add($publication, $this->request);
+		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
+
 		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submissionId);
 		$hrefs = array_unique(
 			array_map(function($h) {
@@ -187,12 +202,20 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		$serverHost = $this->request->_serverHost;
 		$requestPath = $this->request->_requestPath;
-		$editIri = $this->request->url(null, 'swordserver', 'submissions', $submissionId);
-		$stmtIri = $this->request->url(null, 'swordserver', 'submissions', [$submissionId, '/statement']);
+		$editIri = $this->request->getRouter()->url($this->request,
+													null,
+													null,
+													null,
+													['swordserver', 'submissions', $submissionId]);
+		$stmtIri = $this->request->getRouter()->url($this->request,
+													null,
+													null,
+													null,
+													['swordserver', 'submissions', $submissionId, 'statement']);
 
 		$depositReceipt = new DepositReceipt(
 			[
-				'title' => $submission->getTitle('en_US'),
+				'title' => $submission->getTitle($locale),
 				'edit-iri' => $editIri,
 				'stmt-iri' => $stmtIri,
 			]
@@ -210,13 +233,15 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * @param $opts array
 	 */
 	function statement($opts) {
+		$locale = Locale::getDefault();
 		$submissionDao = Application::getSubmissionDAO();
 		$submission = $submissionDao->getById($opts['id']);
-
+		$sectionDao = DAORegistry::getDAO('SectionDAO');
+		$section = $sectionDao->getById($submission->getSectionId());
 		$swordStatement = new SwordStatement(
 			[
 				'state_href' => $this->_getStateIRI(),
-				'state_description' => "Deposited to " . $submission->getSectionTitle(),
+				'state_description' => "Deposited to " . $section->getData('title', $locale),
 			]
 		);
 
@@ -232,7 +257,6 @@ class SwordServerPlugin extends GatewayPlugin {
 		if (!$this->getEnabled()) {
 			return false;
 		}
-
 		$this->request = $request;
 		$handler = $request->_router->getHandler();
 		$this->user = $handler->getAuthorizedContextObject(ASSOC_TYPE_USER);
@@ -241,7 +265,21 @@ class SwordServerPlugin extends GatewayPlugin {
 		foreach ($this->_endpoints as $endpoint) {
 			if ($opts = $this->_matchRoute($args, $endpoint['pattern'])) {
 				if ($method == $endpoint['method']) {
-					call_user_func($endpoint['handler'], $opts);
+					try {
+						call_user_func($endpoint['handler'], $opts);
+					} catch (Throwable $e) {
+						error_log("=============");
+						error_log($e->getMessage());
+						$swordError = new SwordError([
+							'summary' => "Application Error." . $e->__toString()
+						]);
+
+						header('Content-Type: application/xml');
+						header('HTTP/1.1 500 Not ServerError');
+						header('Allow ' . implode($methodsAllowed, ', '));
+						echo $swordError->saveXML();
+						exit;
+					}
 					break;
 				}
 				array_push($methodsAllowed, $endpoint['method']);

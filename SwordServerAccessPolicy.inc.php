@@ -64,9 +64,10 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 				$userDao = DAORegistry::getDAO('UserDAO');
 				$user = $userDao->getBySetting('apiKey', $decoded);
 			} catch (Firebase\JWT\SignatureInvalidException $e) {
+			} catch (DomainException $e) {
 			}
 		}
-		
+
 		if ($user && $user->hasRole(ROLE_ID_MANAGER, $this->request->getJournal()->getId())) {
 			$this->addAuthorizedContextObject(ASSOC_TYPE_USER, $user);
 			return AUTHORIZATION_PERMIT;

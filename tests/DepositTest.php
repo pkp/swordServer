@@ -29,7 +29,9 @@ class DepositTest extends PHPUnit\Framework\TestCase
 			'http://purl.org/net/sword/package/METSDSpaceSIP',
 			'application/zip', false, true
 		);
-
+		if(is_a($response, "SWORDAPPErrorDocument")) {
+				throw new Exception($response->toString());
+		}
 		// DepositReceipt
 		$this->assertEquals(
 			$response->sac_title,
@@ -48,7 +50,6 @@ class DepositTest extends PHPUnit\Framework\TestCase
 			$response->sac_treatment,
 			"Posted to the Article Submission Queue"
 		);
-
 		// SwordStatement
 		$stmt_link = array_shift($stmt_links);
 		$stmt_href = $stmt_link->sac_linkhref->__toString();
