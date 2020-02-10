@@ -107,7 +107,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$sectionDAO = DAORegistry::getDAO('SectionDAO');
 		$resultSet = $sectionDAO->getByJournalId($journalId);
 		$sections = $resultSet->toAssociativeArray();
-		$serviceDocument = new ServiceDocument(
+ 		$serviceDocument = new ServiceDocument(
 			$journal,
 			$sections,
 			$this->request->getRequestUrl()
@@ -126,8 +126,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		$headers = getallheaders();
 		$sectionId = intval($opts['id']);
 		$locale = Locale::getDefault();
-		$submissionDao = Application::getSubmissionDAO();
-		$submission = $submissionDao->newDataObject();
+		$submissionDAO = Application::getSubmissionDAO();
+		$submission = $submissionDAO->newDataObject();
 		$submission->setContextId($this->request->getJournal()->getId());
 		$submission->setDateSubmitted (Core::getCurrentDate());
 		$submission->setLastModified (Core::getCurrentDate());
@@ -157,29 +157,68 @@ class SwordServerPlugin extends GatewayPlugin {
 		$metsDoc = simplexml_load_file($uploadDir . "/mets.xml");
 		$metsDoc->registerXPathNamespace("mets", 'http://www.loc.gov/METS/');
 		$metsDoc->registerXPathNamespace("epdcx", "http://purl.org/eprint/epdcx/2006-11-16/");
+		$metsDoc->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
+
+		$submissionData = [
+			'contextId' => $this->request->getJournal()->getId(),
+			'status' => STATUS_QUEUED
+		];
+		$publicationData = [
+			'status' => STATUS_QUEUED
+		];
+
 		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/" .
 								 "elements/1.1/title']/epdcx:valueString");
 		if (!empty($match)) {
 			$title = $match[0]->__toString();
-			$submission->setTitle($title, 'en_US');
+			$publicationData['title'] = ['en_US' => $title];
 		}
-
-		$submissionId = $submissionDao->insertObject($submission);
-
-		$publication = new Publication();
-		$publication->setData('submissionId', $submissionId);
-		$publication->setData('locale', 'en_US');
-		$publication->setData('language', PKPString::substr('en_US', 0, 2));
+		$submission->_data = $submissionData;
+		$submission = Services::get('submission')->add($submission, $this->request);
+		$publicationData['submissionId'] = $submission->getId();
+		$publication = DAORegistry::getDAO('PublicationDAO')->newDataObject();
+		$publication->_data = $publicationData;
 		$publication->setData('sectionId', $this->request->getJournal()->getId());
 		$publication->setData('status', STATUS_QUEUED);
 		if (!empty($match)) {
 			$title = $match[0]->__toString();
-			$publication->setData('title', $title);
+			$publication->setData('title', $title, $locale);
 		}
+		$publication->setData('locale', $locale);
 		$publication = Services::get('publication')->add($publication, $this->request);
 		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
 
-		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submissionId);
+		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
+		$authorDAO = DAORegistry::getDAO("AuthorDAO");
+		foreach ($nameNodes as $nameNode) {
+				$nameNode->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
+				$email = $nameNode->xpath("mods:nameIdentifier[@type='email']");
+				$given = $nameNode->xpath("mods:namePart[@type='given']");
+				$family = $nameNode->xpath("mods:namePart[@type='family']");
+				$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
+				if (!empty($email) && (!empty($given) || !empty($family))) {
+						$author = $authorDAO->newDataObject();
+						$author->_data = [
+								'email' => $email[0]->__toString(),
+								'seq' => 1,
+								'publicationId' => $publication->getId(),
+								'userGroupId' => 14,
+								'includeInBrowse' => 1,
+						];
+						if (!empty($family)) {
+								$author->setData('familyName', $family[0]->__toString(), $locale);
+						}
+						if (!empty($given)) {
+								$author->setData('givenName', $given[0]->__toString(), $locale);
+						}
+						$author = Services::get('author')->add($author, $this->request);
+						if (!empty($primary)) {
+								$publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
+						}
+				}
+		}
+	
+		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submission->getId());
 		$hrefs = array_unique(
 			array_map(function($h) {
 				return $h['href']->__toString();
@@ -189,9 +228,10 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		foreach ($hrefs as $href) {
 			if (file_exists($uploadDir . "/" . $href)) {
-				$submissionFile = $submissionFileManager->uploadSubmissionFile(
+					$submissionFile = $submissionFileManager->uploadSubmissionFile(
 					$href, SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
 				);
+					
 			}
 		}
 
@@ -206,12 +246,12 @@ class SwordServerPlugin extends GatewayPlugin {
 													null,
 													null,
 													null,
-													['swordserver', 'submissions', $submissionId]);
+													['swordserver', 'submissions', $submission->getId()]);
 		$stmtIri = $this->request->getRouter()->url($this->request,
 													null,
 													null,
 													null,
-													['swordserver', 'submissions', $submissionId, 'statement']);
+													['swordserver', 'submissions', $submission->getId(), 'statement']);
 
 		$depositReceipt = new DepositReceipt(
 			[
@@ -234,10 +274,10 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	function statement($opts) {
 		$locale = Locale::getDefault();
-		$submissionDao = Application::getSubmissionDAO();
-		$submission = $submissionDao->getById($opts['id']);
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$section = $sectionDao->getById($submission->getSectionId());
+		$submissionDAO = Application::getSubmissionDAO();
+		$submission = $submissionDAO->getById($opts['id']);
+		$sectionDAO = DAORegistry::getDAO('SectionDAO');
+		$section = $sectionDAO->getById($submission->getSectionId());
 		$swordStatement = new SwordStatement(
 			[
 				'state_href' => $this->_getStateIRI(),

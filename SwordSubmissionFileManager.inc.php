@@ -11,10 +11,10 @@
  * @ingroup file
  *
  * @brief Extends SubmissionFileManager to support submission
- * files arrving in the POST body (i.e., not in $_FILES)
+ * files arriving in the POST body (i.e., not in $_FILES)
  *
  */
-
+import('lib.pkp.classes.submission.SubmissionFile');
 import('lib.pkp.classes.file.SubmissionFileManager');
 
 class SwordSubmissionFileManager extends SubmissionFileManager {
