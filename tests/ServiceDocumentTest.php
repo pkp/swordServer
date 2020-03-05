@@ -1,5 +1,16 @@
 <?php
 
+/**
+ * @file tests/ServiceDocumentTest.php
+ *
+ * Copyright (c) 2014-2020 Simon Fraser University
+ * Copyright (c) 2003-2020 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file LICENSE.
+ *
+ * @class ServiceDocumentTest
+ * @brief Service document tests for Sword gateway plugin
+ */
+
 require_once __DIR__ . '/../swordappv2-php-library/swordappclient.php';
 
 class ServiceDocumentTest extends PHPUnit\Framework\TestCase
