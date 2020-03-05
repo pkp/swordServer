@@ -1,6 +1,6 @@
 <?php
 /**
- * @file classes/security/authorization/SwordServerAccessPolicy.inc.php
+ * @file SwordServerAccessPolicy.inc.php
  *
  * Copyright (c) 2014-2020 Simon Fraser University
  * Copyright (c) 2000-2020 John Willinsky

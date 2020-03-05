@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file classes/file/SubmissionFileManager.inc.php
+ * @file SwordSubmissionFileManager.inc.php
  *
  * Copyright (c) 2014-2020 Simon Fraser University
  * Copyright (c) 2003-2020 John Willinsky
