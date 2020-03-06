@@ -11,9 +11,9 @@ msgstr ""
 "PO-Revision-Date: 2020-02-13T22:46:13+00:00\n"
 "Language: \n"
 
-msgid "plugins.generic.swordserver.displayName"
+msgid "plugins.gateways.swordserver.displayName"
 msgstr "SWORD Server Plugin"
 
-msgid "plugins.generic.swordserver.description"
+msgid "plugins.gateways.swordserver.description"
 msgstr "An API for accepting SWORD deposits"
 
