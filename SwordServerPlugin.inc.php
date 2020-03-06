@@ -1,11 +1,11 @@
 <?php
 
 /**
- * @file plugins/gateways/swordserver/SwordServerPlugin.inc.php
+ * @file SwordServerPlugin.inc.php
  *
- * Copyright (c) 2014-2019 Simon Fraser University
- * Copyright (c) 2003-2019 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2020 Simon Fraser University
+ * Copyright (c) 2003-2020 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file LICENSE.
  *
  * @class SwordServerPlugin
  * @ingroup plugins_gateways_swordserver
@@ -168,7 +168,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		];
 
 		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/" .
-								 "elements/1.1/title']/epdcx:valueString");
+			 "elements/1.1/title']/epdcx:valueString");
 		if (!empty($match)) {
 			$title = $match[0]->__toString();
 			$publicationData['title'] = ['en_US' => $title];
@@ -191,31 +191,31 @@ class SwordServerPlugin extends GatewayPlugin {
 		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
 		$authorDAO = DAORegistry::getDAO("AuthorDAO");
 		foreach ($nameNodes as $nameNode) {
-				$nameNode->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
-				$email = $nameNode->xpath("mods:nameIdentifier[@type='email']");
-				$given = $nameNode->xpath("mods:namePart[@type='given']");
-				$family = $nameNode->xpath("mods:namePart[@type='family']");
-				$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
-				if (!empty($email) && (!empty($given) || !empty($family))) {
-						$author = $authorDAO->newDataObject();
-						$author->_data = [
-								'email' => $email[0]->__toString(),
-								'seq' => 1,
-								'publicationId' => $publication->getId(),
-								'userGroupId' => 14,
-								'includeInBrowse' => 1,
-						];
-						if (!empty($family)) {
-								$author->setData('familyName', $family[0]->__toString(), $locale);
-						}
-						if (!empty($given)) {
-								$author->setData('givenName', $given[0]->__toString(), $locale);
-						}
-						$author = Services::get('author')->add($author, $this->request);
-						if (!empty($primary)) {
-								$publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
-						}
+			$nameNode->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
+			$email = $nameNode->xpath("mods:nameIdentifier[@type='email']");
+			$given = $nameNode->xpath("mods:namePart[@type='given']");
+			$family = $nameNode->xpath("mods:namePart[@type='family']");
+			$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
+			if (!empty($email) && (!empty($given) || !empty($family))) {
+				$author = $authorDAO->newDataObject();
+				$author->_data = [
+					'email' => $email[0]->__toString(),
+					'seq' => 1,
+					'publicationId' => $publication->getId(),
+					'userGroupId' => 14,
+					'includeInBrowse' => 1,
+				];
+				if (!empty($family)) {
+					$author->setData('familyName', $family[0]->__toString(), $locale);
 				}
+				if (!empty($given)) {
+					$author->setData('givenName', $given[0]->__toString(), $locale);
+				}
+				$author = Services::get('author')->add($author, $this->request);
+				if (!empty($primary)) {
+					$publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
+				}
+			}
 		}
 	
 		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submission->getId());
@@ -228,7 +228,7 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		foreach ($hrefs as $href) {
 			if (file_exists($uploadDir . "/" . $href)) {
-					$submissionFile = $submissionFileManager->uploadSubmissionFile(
+				$submissionFile = $submissionFileManager->uploadSubmissionFile(
 					$href, SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
 				);
 					
@@ -243,15 +243,17 @@ class SwordServerPlugin extends GatewayPlugin {
 		$serverHost = $this->request->_serverHost;
 		$requestPath = $this->request->_requestPath;
 		$editIri = $this->request->getRouter()->url($this->request,
-													null,
-													null,
-													null,
-													['swordserver', 'submissions', $submission->getId()]);
+			null,
+			null,
+			null,
+			['swordserver', 'submissions', $submission->getId()]
+		);
 		$stmtIri = $this->request->getRouter()->url($this->request,
-													null,
-													null,
-													null,
-													['swordserver', 'submissions', $submission->getId(), 'statement']);
+			null,
+			null,
+			null,
+			['swordserver', 'submissions', $submission->getId(), 'statement']
+		);
 
 		$depositReceipt = new DepositReceipt(
 			[

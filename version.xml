@@ -2,18 +2,18 @@
 <!DOCTYPE version SYSTEM "../../../lib/pkp/dtd/pluginVersion.dtd">
 
 <!--
-  * plugins/gateways/swordserver/version.xml
+  * version.xml
   *
-  * Copyright (c) 2014-2019 Simon Fraser University
-  * Copyright (c) 2003-2019 John Willinsky
-  * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+  * Copyright (c) 2014-2020 Simon Fraser University
+  * Copyright (c) 2003-2020 John Willinsky
+  * Distributed under the GNU GPL v3. For full terms see the file LICENSE.
   *
   * Plugin version information.
   -->
 <version>
 	<application>swordserver</application>
 	<type>plugins.gateways</type>
-  <lazy-load>1</lazy-load>
+	<lazy-load>1</lazy-load>
 	<release>0.0.0.1</release>
 	<date>2020-03-02</date>
 </version>
