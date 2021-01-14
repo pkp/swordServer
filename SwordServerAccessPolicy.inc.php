@@ -60,7 +60,12 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		if (!$user && $apiToken = $headers['X-Ojs-Sword-Api-Token']) {
 				$secret = Config::getVar('security', 'api_key_secret', '');
 			try {
-				$decoded = json_decode(JWT::decode($apiToken, $secret, array('HS256')));
+				$decoded = JWT::decode($apiToken, $secret, array('HS256'));
+				// Compatibility with old API keys
+				// https://github.com/pkp/pkp-lib/issues/6462
+				if (substr($decoded, 0, 2) === '""') {
+					$decoded = json_decode($decoded);
+				}
 				$userDao = DAORegistry::getDAO('UserDAO');
 				$user = $userDao->getBySetting('apiKey', $decoded);
 			} catch (Firebase\JWT\SignatureInvalidException $e) {
