@@ -19,7 +19,6 @@ import('classes.publication.Publication');
 require __DIR__ . '/ServiceDocument.inc.php';
 require __DIR__ . '/DepositReceipt.inc.php';
 require __DIR__ . '/SwordStatement.inc.php';
-require __DIR__ . '/SwordSubmissionFileManager.inc.php';
 require __DIR__ . '/SwordServerAccessPolicy.inc.php';
 require __DIR__ . '/SwordError.inc.php';
 
@@ -134,25 +133,18 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setSectionId($sectionId);
 		$submission->setLocale($locale);
 
-		$uploadDir = ini_get('upload_tmp_dir') . '/' . uniqid();
-		mkdir($uploadDir, DIRECTORY_MODE_MASK);
-		$uploadedFilePath = $uploadDir . '/sword_upload.dat';
-		file_put_contents($uploadedFilePath, file_get_contents('php://input'));
-		if ($headers['Content-Type'] == 'application/zip' && $headers['Packaging'] == "http://purl.org/net/sword/package/METSDSpaceSIP") {
-			$zip = new ZipArchive;
-			$res = $zip->open($uploadedFilePath);
-			if ($res) {
-				$zip->extractTo($uploadDir);
-				$zip->close();
-			} else {
-				throw new Exception('Zip extraction failed');
-			}
-		}
+		$zipPath = tempnam(sys_get_temp_dir(), 'sword');
+		$zipContents = file_get_contents('php://input');
+		file_put_contents($zipPath, $zipContents);
 
-		if (!file_exists($uploadDir . "/mets.xml")) {
-			throw new Exception('No mets.xml document in extracted Zip package');
-		}
-		$metsDoc = simplexml_load_file($uploadDir . "/mets.xml");
+		if ($headers['Content-Type'] != 'application/zip' || $headers['Packaging'] != "http://purl.org/net/sword/package/METSDSpaceSIP") throw new Exception('Unknown content type or packaging.');
+		$zip = new ZipArchive;
+		$res = $zip->open($zipPath);
+		if (!$res) throw new Exception('Unable to open zip file.');
+
+		$metsString = $zip->getFromName('mets.xml');
+		if ($metsString === false) throw new Exception('No mets.xml document in extracted Zip package');
+		$metsDoc = simplexml_load_string($metsString);
 		$metsDoc->registerXPathNamespace("mets", 'http://www.loc.gov/METS/');
 		$metsDoc->registerXPathNamespace("epdcx", "http://purl.org/eprint/epdcx/2006-11-16/");
 		$metsDoc->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
@@ -187,7 +179,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
 
 		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
-		$authorDAO = DAORegistry::getDAO("AuthorDAO");
+		$authorDao = DAORegistry::getDAO("AuthorDAO");
 		foreach ($nameNodes as $nameNode) {
 			$nameNode->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
 			$email = $nameNode->xpath("mods:nameIdentifier[@type='email']");
@@ -195,7 +187,7 @@ class SwordServerPlugin extends GatewayPlugin {
 			$family = $nameNode->xpath("mods:namePart[@type='family']");
 			$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
 			if (!empty($email) && (!empty($given) || !empty($family))) {
-				$author = $authorDAO->newDataObject();
+				$author = $authorDao->newDataObject();
 				$author->_data = [
 					'email' => $email[0]->__toString(),
 					'seq' => 1,
@@ -216,7 +208,6 @@ class SwordServerPlugin extends GatewayPlugin {
 			}
 		}
 	
-		$submissionFileManager = new SwordSubmissionFileManager($this->request->getJournal()->getId(), $submission->getId());
 		$hrefs = array_unique(
 			array_map(function($h) {
 				return $h['href']->__toString();
@@ -225,18 +216,17 @@ class SwordServerPlugin extends GatewayPlugin {
 		);
 
 		foreach ($hrefs as $href) {
-			if (file_exists($uploadDir . "/" . $href)) {
-				$submissionFile = $submissionFileManager->uploadSubmissionFile(
-					$href, SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
-				);
-					
+			if (($fileContents = $zip->getFromName($href)) !== false) {
+				// Add a file entry
+				$filePath = tempnam(sys_get_temp_dir(), 'sword');
+				file_put_contents($filePath, $fileContents);
+				$this->_addFile($submission, $filePath, $href, $locale);
+				unlink($filePath);
 			}
 		}
 
 		// Attach the original package as well
-		$submissionFile = $submissionFileManager->uploadSubmissionFile(
-			'sword_upload.dat', SUBMISSION_FILE_SUBMISSION, $this->user->getId(), null, GENRE_CATEGORY_SUPPLEMENTARY, null, null
-		);
+		$this->_addFile($submission, $zipPath, 'sword.zip', $locale);
 
 		$serverHost = $this->request->_serverHost;
 		$requestPath = $this->request->_requestPath;
@@ -261,10 +251,45 @@ class SwordServerPlugin extends GatewayPlugin {
 			]
 		);
 
-		$submissionFileManager->rmtree($uploadDir);
+		$zip->close();
+
 		header('Content-Type: application/xml');
 		echo $depositReceipt->saveXML();
 		exit;
+	}
+
+	/**
+	 * Add a file to the submission from the SWORD deposit.
+	 * @param Submission $submission
+	 * @param string $localFilename The name of the file to add on the local filesystem
+	 * @param string $targetFilename The name of the file to represent in the target submission
+	 * @param string $locale Locale code xx_YY
+	 */
+	protected function _addFile($submission, $localFilename, $targetFilename, $locale) {
+		// Identify a genre for uploaded files.
+		$genre = DAORegistry::getDAO('GenreDAO')->getByKey('OTHER', $this->request->getJournal()->getId());
+		if (!$genre) throw new Exception('Could not find genre with key OTHER for SWORD deposit!');
+
+		$submissionFileService = Services::get('submissionFile');
+		$submissionDir = Services::get('submissionFile')->getSubmissionDir($submission->getData('contextId'), $submission->getId());
+		$fileService = Services::get('file');
+		$info = pathinfo($targetFilename);
+		$newFileId = $fileService->add(
+			$localFilename,
+			$submissionDir . '/' . uniqid() . '.' . ($info['extension'] ?? 'txt')
+		);
+
+		// Add a submission file entry
+		import('lib.pkp.classes.submission.SubmissionFile');
+		$submissionFile = new SubmissionFile();
+		$submissionFile->setData('fileStage', SUBMISSION_FILE_SUBMISSION);
+		$submissionFile->setData('viewable', true);
+		$submissionFile->setData('fileId', $newFileId);
+		$submissionFile->setData('submissionId', $submission->getId());
+		$submissionFile->setData('name', $targetFilename, $locale);
+
+		$submissionFile->setData('genreId', $genre->getId());
+		return Services::get('submissionFile')->add($submissionFile, $this->request);
 	}
 
 	/**

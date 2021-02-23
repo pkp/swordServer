@@ -52,10 +52,11 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 			if (Validation::checkCredentials($userPass[0], $userPass[1])) {
 				$userDao = DAORegistry::getDAO('UserDAO');
 				$user = $userDao->getByUsername($userPass[0]);
+				Registry::set('user', $user);
 			}
 		}
 		// 2. Try API Key
-		if (!$user && $apiToken = $headers['X-Ojs-Sword-Api-Token']) {
+		if (!$user && $apiToken = ($headers['X-Ojs-Sword-Api-Token'] ?? null)) {
 				$secret = Config::getVar('security', 'api_key_secret', '');
 			try {
 				$decoded = JWT::decode($apiToken, $secret, array('HS256'));
@@ -66,6 +67,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 				}
 				$userDao = DAORegistry::getDAO('UserDAO');
 				$user = $userDao->getBySetting('apiKey', $decoded);
+				Registry::set('user', $user);
 			} catch (Firebase\JWT\SignatureInvalidException $e) {
 			} catch (DomainException $e) {
 			}
