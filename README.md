@@ -20,5 +20,5 @@ Start OJS on `localhost:8000` using the test database.
 Check out the SWORD client library and run tests:
 
     git clone https://github.com/swordapp/swordappv2-php-library
-    export SWORD_ENDPOINT_URL=http://localhost:8000/index.php/publicknowledge/gateway/plugin/swordserver
+    export SWORD_ENDPOINT_URL=http://localhost:8000/index.php/publicknowledge/gateway/plugin/swordServer
     composer test

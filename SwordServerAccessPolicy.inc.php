@@ -56,7 +56,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		}
 		// 2. Try API Key
 		if (!$user && $apiToken = $headers['X-Ojs-Sword-Api-Token']) {
-				$secret = Config::getVar('security', 'api_key_secret', '');
+			$secret = Config::getVar('security', 'api_key_secret', '');
 			try {
 				$decoded = JWT::decode($apiToken, $secret, array('HS256'));
 				// Compatibility with old API keys
