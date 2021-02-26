@@ -71,7 +71,7 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * @copydoc Plugin::getName()
 	 */
 	function getName() {
-		return 'swordserver';
+		return 'swordServer';
 	}
 
 	/**
