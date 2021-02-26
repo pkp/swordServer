@@ -234,13 +234,13 @@ class SwordServerPlugin extends GatewayPlugin {
 			null,
 			null,
 			null,
-			['swordserver', 'submissions', $submission->getId()]
+			['swordServer', 'submissions', $submission->getId()]
 		);
 		$stmtIri = $this->request->getRouter()->url($this->request,
 			null,
 			null,
 			null,
-			['swordserver', 'submissions', $submission->getId(), 'statement']
+			['swordServer', 'submissions', $submission->getId(), 'statement']
 		);
 
 		$depositReceipt = new DepositReceipt(
