@@ -40,7 +40,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 	 * @copydoc AuthorizationPolicy::effect()
 	 */
 	function effect() {
-		$callOnDeny = array($this, 'unauthorizedResponse', array());
+		$callOnDeny = [$this, 'unauthorizedResponse', []];
 		$this->setAdvice(AUTHORIZATION_ADVICE_CALL_ON_DENY, $callOnDeny);
 		$headers = getallheaders();
 		$user = null;
@@ -59,7 +59,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		if (!$user && $apiToken = ($headers['X-Ojs-Sword-Api-Token'] ?? null)) {
 				$secret = Config::getVar('security', 'api_key_secret', '');
 			try {
-				$decoded = JWT::decode($apiToken, $secret, array('HS256'));
+				$decoded = JWT::decode($apiToken, $secret, ['HS256']);
 				// Compatibility with old API keys
 				// https://github.com/pkp/pkp-lib/issues/6462
 				if (substr($decoded, 0, 2) === '""') {
