@@ -1,10 +1,18 @@
 # OJS SWORD Server Plugin
 
-This plugin will add a SWORD service to OJS. For now, it
-only provides a partial implementation of the SWORD ServiceDocument.
+This plugin will add a SWORD service to OJS.
 
-## Install and Test
+## Install
 Use the plugin gallery from within OJS to install the plugin.
+
+## Use
+
+This plugin provides services at the following URLs:
+
+Service document: .../index.php/[journal path]/gateway/plugin/swordServer/servicedocument
+Section deposit point: .../index.php/publicknowledge/gateway/plugin/swordServer/sections/2
+
+## Tests
 
 Enable the plugin under Settings -> Website -> Plugins ->  Gateway Plugins
 

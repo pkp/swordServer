@@ -31,7 +31,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 		]);
 		header('Content-Type: application/xml');
 		header("HTTP/1.1 401 Unauthorized");
-
+		error_log('Unauthorized access to PKP SWORD gateway.');
 		echo $swordError->saveXML();
 		exit;
 	}
