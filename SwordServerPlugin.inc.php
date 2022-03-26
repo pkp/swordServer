@@ -101,8 +101,8 @@ class SwordServerPlugin extends GatewayPlugin {
 	function serviceDocument() {
 		$journal = $this->request->getJournal();
 		$journalId = $journal->getId();
-		$sectionDAO = DAORegistry::getDAO('SectionDAO');
-		$resultSet = $sectionDAO->getByJournalId($journalId);
+		$sectionDao = DAORegistry::getDAO('SectionDAO');
+		$resultSet = $sectionDao->getByJournalId($journalId);
 		$sections = $resultSet->toAssociativeArray();
  		$serviceDocument = new ServiceDocument(
 			$journal,
@@ -120,101 +120,98 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * @param $opts array
 	 */
 	function deposit($opts) {
-		$headers = getallheaders();
-		$sectionId = intval($opts['id']);
 		$locale = Locale::getDefault();
-		$submissionDAO = Application::getSubmissionDAO();
-		$submission = $submissionDAO->newDataObject();
-		$submission->setContextId($this->request->getJournal()->getId());
+		$journal = $this->request->getJournal();
+
+		// Validate and fetch the target section for this deposit.
+		$sectionDao = Application::getSectionDAO();
+		$section = $sectionDao->getById(intval($opts['id']), $journal->getId());
+		if (!$section) throw new Exception('Unable to determine target section!');
+
+		$userGroupDao = DAORegistry::getDAO('UserGroupDAO');
+		$authorUserGroup = $userGroupDao->getDefaultByRoleId($journal->getId(), ROLE_ID_AUTHOR);
+		if (!$authorUserGroup) throw new Exception('Unable to determine author user group!');
+
+		// Save the sword package to a local file.
+		$headers = getallheaders();
+		if ($headers['Content-Type'] != 'application/zip' || $headers['Packaging'] != "http://purl.org/net/sword/package/METSDSpaceSIP") throw new Exception('Unknown content type or packaging.');
+		$zipPath = tempnam(sys_get_temp_dir(), 'sword');
+		$zipContents = file_get_contents('php://input');
+		file_put_contents($zipPath, $zipContents);
+		$zip = new ZipArchive;
+		if (!$zip->open($zipPath)) throw new Exception('Unable to open zip file.');
+
+		// Load the metadata from the package.
+		$metsString = $zip->getFromName('mets.xml');
+		if ($metsString === false) throw new Exception('No mets.xml document in extracted Zip package');
+		$metsDoc = simplexml_load_string($metsString);
+		$metsDoc->registerXPathNamespace('mets', 'http://www.loc.gov/METS/');
+		$metsDoc->registerXPathNamespace('epdcx', "http://purl.org/eprint/epdcx/2006-11-16/");
+		$metsDoc->registerXPathNamespace('mods', "http://www.loc.gov/mods/v3");
+
+		// Populate a Submission object
+		$submissionDao = Application::getSubmissionDAO();
+		$submission = $submissionDao->newDataObject();
+		$submission->setContextId($journal->getId());
 		$submission->setDateSubmitted (Core::getCurrentDate());
 		$submission->setLastModified (Core::getCurrentDate());
 		$submission->setSubmissionProgress(0);
 		$submission->setStageId(WORKFLOW_STAGE_ID_SUBMISSION);
-		$submission->setSectionId($sectionId);
 		$submission->setLocale($locale);
-
-		$zipPath = tempnam(sys_get_temp_dir(), 'sword');
-		$zipContents = file_get_contents('php://input');
-		file_put_contents($zipPath, $zipContents);
-
-		if ($headers['Content-Type'] != 'application/zip' || $headers['Packaging'] != "http://purl.org/net/sword/package/METSDSpaceSIP") throw new Exception('Unknown content type or packaging.');
-		$zip = new ZipArchive;
-		$res = $zip->open($zipPath);
-		if (!$res) throw new Exception('Unable to open zip file.');
-
-		$metsString = $zip->getFromName('mets.xml');
-		if ($metsString === false) throw new Exception('No mets.xml document in extracted Zip package');
-		$metsDoc = simplexml_load_string($metsString);
-		$metsDoc->registerXPathNamespace("mets", 'http://www.loc.gov/METS/');
-		$metsDoc->registerXPathNamespace("epdcx", "http://purl.org/eprint/epdcx/2006-11-16/");
-		$metsDoc->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
-
-		$submissionData = [
-			'contextId' => $this->request->getJournal()->getId(),
-			'status' => STATUS_QUEUED
-		];
-		$publicationData = [
-			'status' => STATUS_QUEUED
-		];
-
-		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/" .
-			 "elements/1.1/title']/epdcx:valueString");
-		if (!empty($match)) {
-			$title = $match[0]->__toString();
-			$publicationData['title'] = ['en_US' => $title];
-		}
-		$submission->_data = $submissionData;
+		$submission->setStatus(STATUS_QUEUED);
+		$submission->setContextId($journal->getId());
 		$submission = Services::get('submission')->add($submission, $this->request);
-		$publicationData['submissionId'] = $submission->getId();
+
+		// Populate a Publication object
 		$publication = DAORegistry::getDAO('PublicationDAO')->newDataObject();
-		$publication->_data = $publicationData;
-		$publication->setData('sectionId', $this->request->getJournal()->getId());
+		$publication->setData('submissionId', $submission->getId());
+		$publication->setData('sectionId', $section->getId());
 		$publication->setData('status', STATUS_QUEUED);
+
+		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/elements/1.1/title']/epdcx:valueString");
 		if (!empty($match)) {
 			$title = $match[0]->__toString();
 			$publication->setData('title', $title, $locale);
 		}
 		$publication->setData('locale', $locale);
 		$publication = Services::get('publication')->add($publication, $this->request);
+
+		// Set the current submission publication to the new publication object.
 		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
 
+		// Store the list of authors.
 		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
-		$authorDao = DAORegistry::getDAO("AuthorDAO");
+		$authorDao = DAORegistry::getDAO('AuthorDAO');
+		$i = 0;
 		foreach ($nameNodes as $nameNode) {
-			$nameNode->registerXPathNamespace("mods", "http://www.loc.gov/mods/v3");
+			$nameNode->registerXPathNamespace('mods', 'http://www.loc.gov/mods/v3');
 			$email = $nameNode->xpath("mods:nameIdentifier[@type='email']");
 			$given = $nameNode->xpath("mods:namePart[@type='given']");
 			$family = $nameNode->xpath("mods:namePart[@type='family']");
 			$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
 			if (!empty($email) && (!empty($given) || !empty($family))) {
 				$author = $authorDao->newDataObject();
-				$author->_data = [
-					'email' => $email[0]->__toString(),
-					'seq' => 1,
-					'publicationId' => $publication->getId(),
-					'userGroupId' => 14,
-					'includeInBrowse' => 1,
-				];
-				if (!empty($family)) {
-					$author->setData('familyName', $family[0]->__toString(), $locale);
-				}
-				if (!empty($given)) {
-					$author->setData('givenName', $given[0]->__toString(), $locale);
-				}
+				$author->setEmail($email[0]->__toString());
+				$author->setSequence(++$i);
+				$author->setData('publicationId', $publication->getId());
+				$author->setUserGroupId($authorUserGroup->getId());
+				$author->setIncludeInBrowse(true);
+				if ($family) $author->setData('familyName', $family[0]->__toString(), $locale);
+				if ($given) $author->setData('givenName', $given[0]->__toString(), $locale);
+
 				$author = Services::get('author')->add($author, $this->request);
-				if (!empty($primary)) {
-					$publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
-				}
+
+				if ($primary) $publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
 			}
 		}
-	
+
+		// Attach all included files to the submission
 		$hrefs = array_unique(
 			array_map(function($h) {
 				return $h['href']->__toString();
 			}, $metsDoc->xpath("//mets:FLocat[@LOCTYPE='URL']/@xlink:href")
 			)
 		);
-
 		foreach ($hrefs as $href) {
 			if (($fileContents = $zip->getFromName($href)) !== false) {
 				// Add a file entry
@@ -225,34 +222,17 @@ class SwordServerPlugin extends GatewayPlugin {
 			}
 		}
 
-		// Attach the original package as well
+		// Attach the original SWORD deposit package as well
 		$this->_addFile($submission, $zipPath, 'sword.zip', $locale);
-
-		$serverHost = $this->request->_serverHost;
-		$requestPath = $this->request->_requestPath;
-		$editIri = $this->request->getRouter()->url($this->request,
-			null,
-			null,
-			null,
-			['swordServer', 'submissions', $submission->getId()]
-		);
-		$stmtIri = $this->request->getRouter()->url($this->request,
-			null,
-			null,
-			null,
-			['swordServer', 'submissions', $submission->getId(), 'statement']
-		);
-
-		$depositReceipt = new DepositReceipt(
-			[
-				'title' => $submission->getTitle($locale),
-				'edit-iri' => $editIri,
-				'stmt-iri' => $stmtIri,
-			]
-		);
 
 		$zip->close();
 
+		// Create and send the deposit receipt
+		$depositReceipt = new DepositReceipt([
+			'title' => $submission->getTitle($locale),
+			'edit-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId()]),
+			'stmt-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId(), 'statement']),
+		]);
 		header('Content-Type: application/xml');
 		echo $depositReceipt->saveXML();
 		exit;
@@ -287,8 +267,8 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submissionFile->setData('fileId', $newFileId);
 		$submissionFile->setData('submissionId', $submission->getId());
 		$submissionFile->setData('name', $targetFilename, $locale);
-
 		$submissionFile->setData('genreId', $genre->getId());
+
 		return Services::get('submissionFile')->add($submissionFile, $this->request);
 	}
 
@@ -299,14 +279,19 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	function statement($opts) {
 		$locale = Locale::getDefault();
-		$submissionDAO = Application::getSubmissionDAO();
-		$submission = $submissionDAO->getById($opts['id']);
-		$sectionDAO = DAORegistry::getDAO('SectionDAO');
-		$section = $sectionDAO->getById($submission->getSectionId());
+		$submissionDao = Application::getSubmissionDAO();
+		$submission = $submissionDao->getById($opts['id']);
+
+		// Ensure that the requested submission is in the appropriate journal
+		if ($submission->getContextId() != $this->getRequest()->getJournal()->getId()) {
+			throw new Exception('The specified submission is not allowed!');
+		}
+		$sectionDao = DAORegistry::getDAO('SectionDAO');
+		$section = $sectionDao->getById($submission->getSectionId());
 		$swordStatement = new SwordStatement(
 			[
-				'state_href' => $this->_getStateIRI(),
-				'state_description' => "Deposited to " . $section->getData('title', $locale),
+				'state_href' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId(), 'statement']),
+				'state_description' => 'Deposited to ' . $section->getData('title', $locale),
 			]
 		);
 
@@ -336,7 +321,7 @@ class SwordServerPlugin extends GatewayPlugin {
 						error_log("=============");
 						error_log($e->getMessage());
 						$swordError = new SwordError([
-							'summary' => "Application Error." . $e->__toString()
+							'summary' => 'Application Error: ' . $e->__toString()
 						]);
 
 						header('Content-Type: application/xml');
@@ -399,17 +384,5 @@ class SwordServerPlugin extends GatewayPlugin {
 			return $opts;
 		}
 		return true;
-	}
-
-	/**
-	 * Get the IRI for the SWORD statement
-	 *
-	 * @return string SWORD Statement IRI
-	 */
-	function _getStateIRI() {
-		return $this->request->_protocol
-			. '://'
-			. $this->request->_serverHost
-			. $this->request->_requestPath;
 	}
 }
