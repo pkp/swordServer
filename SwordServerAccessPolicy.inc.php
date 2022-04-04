@@ -73,7 +73,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 			}
 		}
 
-		if ($user && $user->hasRole(ROLE_ID_MANAGER, $this->request->getJournal()->getId())) {
+		if ($user && $user->hasRole(ROLE_ID_AUTHOR, $this->request->getJournal()->getId())) {
 			$this->addAuthorizedContextObject(ASSOC_TYPE_USER, $user);
 			return AUTHORIZATION_PERMIT;
 		}

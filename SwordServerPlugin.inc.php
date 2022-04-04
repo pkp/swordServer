@@ -100,10 +100,17 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	function serviceDocument() {
 		$journal = $this->request->getJournal();
-		$journalId = $journal->getId();
 		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$resultSet = $sectionDao->getByJournalId($journalId);
+		$resultSet = $sectionDao->getByJournalId($journal->getId());
 		$sections = $resultSet->toAssociativeArray();
+
+		// Exclude inactive sections
+		$sections = array_filter($sections, fn($section) => !$section->getIsInactive());
+		if ($this->request->getUser()->hasRole(ROLE_ID_MANAGER, $journal->getId())) {
+			// This is not a managerial user; exclude editor restricted sections.
+			$sections = array_filter($sections, fn($section) => !$section->getEditorRestricted());
+		}
+
  		$serviceDocument = new ServiceDocument(
 			$journal,
 			$sections,
@@ -122,11 +129,15 @@ class SwordServerPlugin extends GatewayPlugin {
 	function deposit($opts) {
 		$locale = Locale::getDefault();
 		$journal = $this->request->getJournal();
+		$user = $this->request->getUser();
 
 		// Validate and fetch the target section for this deposit.
 		$sectionDao = Application::getSectionDAO();
 		$section = $sectionDao->getById(intval($opts['id']), $journal->getId());
-		if (!$section) throw new Exception('Unable to determine target section!');
+		$isManager = $user->hasRole(ROLE_ID_MANAGER, $journal->getId());
+		if (!$section || $section->getIsInactive() || (!$isManager && $section->getEditorRestricted())) {
+			throw new Exception('Unable to determine target section!');
+		}
 
 		$userGroupDao = DAORegistry::getDAO('UserGroupDAO');
 		$authorUserGroup = $userGroupDao->getDefaultByRoleId($journal->getId(), ROLE_ID_AUTHOR);
@@ -134,7 +145,7 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		// Save the sword package to a local file.
 		$headers = getallheaders();
-		if ($headers['Content-Type'] != 'application/zip' || $headers['Packaging'] != "http://purl.org/net/sword/package/METSDSpaceSIP") throw new Exception('Unknown content type or packaging.');
+		if ($headers['Content-Type'] != 'application/zip' || $headers['Packaging'] != 'http://purl.org/net/sword/package/METSDSpaceSIP') throw new Exception('Unknown content type or packaging.');
 		$zipPath = tempnam(sys_get_temp_dir(), 'sword');
 		$zipContents = file_get_contents('php://input');
 		file_put_contents($zipPath, $zipContents);
@@ -155,7 +166,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setContextId($journal->getId());
 		$submission->setDateSubmitted (Core::getCurrentDate());
 		$submission->setLastModified (Core::getCurrentDate());
-		$submission->setSubmissionProgress(0);
+		$submission->setSubmissionProgress($isManager ? 0 : 1); // Force non-editor users to review submission steps.
 		$submission->setStageId(WORKFLOW_STAGE_ID_SUBMISSION);
 		$submission->setLocale($locale);
 		$submission->setStatus(STATUS_QUEUED);
@@ -178,6 +189,10 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		// Set the current submission publication to the new publication object.
 		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
+
+		// Assign the user author to the stage
+		$stageAssignmentDao = DAORegistry::getDAO('StageAssignmentDAO');
+		$stageAssignmentDao->build($submission->getId(), $authorUserGroup->getId(), $user->getId());
 
 		// Store the list of authors.
 		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
