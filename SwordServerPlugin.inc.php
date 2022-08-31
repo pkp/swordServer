@@ -240,9 +240,6 @@ class SwordServerPlugin extends GatewayPlugin {
 			}
 		}
 
-		// Attach the original SWORD deposit package as well
-		$this->_addFile($submission, $zipPath, 'sword.zip', $locale);
-
 		$zip->close();
 
 		// Create and send the deposit receipt
