@@ -181,8 +181,11 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/elements/1.1/title']/epdcx:valueString");
 		if (!empty($match)) {
-			$title = $match[0]->__toString();
-			$publication->setData('title', $title, $locale);
+			$publication->setData('title', $match[0]->__toString(), $locale);
+		}
+		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/terms/abstract']/epdcx:valueString");
+		if (!empty($match)) {
+			$publication->setData('abstract', $match[0]->__toString(), $locale);
 		}
 		$publication->setData('locale', $locale);
 		$publication = Services::get('publication')->add($publication, $this->request);
