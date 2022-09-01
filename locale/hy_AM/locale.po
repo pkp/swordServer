@@ -2,7 +2,7 @@
 # Tigran Zargaryan <tigran@flib.sci.am>, 2022.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2022-07-02 03:52+0000\n"
+"PO-Revision-Date: 2022-09-01 19:55+0000\n"
 "Last-Translator: Tigran Zargaryan <tigran@flib.sci.am>\n"
 "Language-Team: Armenian <http://translate.pkp.sfu.ca/projects/plugins/"
 "swordServer/hy_AM/>\n"
@@ -11,10 +11,18 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 3.9.1\n"
+"X-Generator: Weblate 4.13.1\n"
 
 msgid "plugins.gateways.swordserver.description"
 msgstr "SWORD ավանդադրումներ ընդունելու API"
 
 msgid "plugins.gateways.swordserver.displayName"
 msgstr "SWORD կայանի հավելված"
+
+msgid "plugins.gateways.swordserver.servicedocument"
+msgstr ""
+"<p>SWORD ավանդադրումները կարելի է կատարել այս ծառայության փաստաթղթում` "
+"օգտագործելով սպասարկման փաստաթղթի URL-ը` <pre>{$serviceDocumentUrl}</pre></p>"
+"\n"
+"<p>Ավանդադրման հատուկ կետերը կարող են հասցեագրվել բաժնի ID-ով: Օրինակ՝ բաժնի "
+"ID 1-ի համար՝ <pre>{$exampleDepositPointUrl}</pre></p>"
