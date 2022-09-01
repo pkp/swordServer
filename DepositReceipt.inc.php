@@ -35,6 +35,13 @@ class DepositReceipt extends DOMDocument {
 		$swordEditIri->setAttribute('rel', "http://purl.org/net/sword/terms/add");
 		$swordEditIri->setAttribute('href', $data['edit-iri']);
 
+		if (isset($data['alternateLink'])) {
+			$alternateLinkElement = $this->createElement('link');
+			$alternateLinkElement->setAttribute('rel', 'alternate');
+			$alternateLinkElement->setAttribute('href', $data['alternateLink']);
+			$root->appendChild($alternateLinkElement);
+		}
+
 		$stmtIri = $this->createElement('link');
 		$root->appendChild($stmtIri);
 		$stmtIri->setAttribute('rel', "http://purl.org/net/sword/terms/statement");

@@ -247,6 +247,7 @@ class SwordServerPlugin extends GatewayPlugin {
 			'title' => $submission->getTitle($locale),
 			'edit-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId()]),
 			'stmt-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId(), 'statement']),
+			'alternateLink' => $this->request->getRouter()->url($this->request, null, 'submission', 'wizard', [1], ['submissionId' => $submission->getId()]),
 		]);
 		header('Content-Type: application/xml');
 		echo $depositReceipt->saveXML();
