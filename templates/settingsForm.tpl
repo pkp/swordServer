@@ -32,7 +32,7 @@ pre {
 		{include file="controllers/notification/inPlaceNotification.tpl" notificationId="swordServerSettingsFormNotification"}
 
 		{fbvFormArea id="swordServerSettingsFormArea"}
-			{capture assign="exampleDepositPointUrl"}{url router=$smarty.const.ROUTE_PAGE page="gateway" op="plugin" path="swordServer"|to_array":"sections":"1"}{/capture}
+			{capture assign="exampleDepositPointUrl"}{url router=$smarty.const.ROUTE_PAGE page="gateway" op="plugin" path="swordServer"|to_array:"sections":"1"}{/capture}
 			{capture assign="serviceDocumentUrl"}{url router=$smarty.const.ROUTE_PAGE page="gateway" op="plugin" path="swordServer"|to_array:"servicedocument"}{/capture}
 			{translate key="plugins.gateways.swordserver.servicedocument" serviceDocumentUrl=$serviceDocumentUrl|escape exampleDepositPointUrl=$exampleDepositPointUrl|escape}
 		{/fbvFormArea}
