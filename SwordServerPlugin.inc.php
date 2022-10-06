@@ -105,10 +105,14 @@ class SwordServerPlugin extends GatewayPlugin {
 		$sections = $resultSet->toAssociativeArray();
 
 		// Exclude inactive sections
-		$sections = array_filter($sections, fn($section) => !$section->getIsInactive());
+		$sections = array_filter($sections, function($section) {
+			return !$section->getIsInactive();
+		});
 		if ($this->request->getUser()->hasRole(ROLE_ID_MANAGER, $journal->getId())) {
 			// This is not a managerial user; exclude editor restricted sections.
-			$sections = array_filter($sections, fn($section) => !$section->getEditorRestricted());
+			$sections = array_filter($sections, function($section) {
+				return !$section->getEditorRestricted();
+			});
 		}
 
  		$serviceDocument = new ServiceDocument(
