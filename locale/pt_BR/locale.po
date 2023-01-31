@@ -1,6 +1,7 @@
+# Diego José Macêdo <diegojmacedo@gmail.com>, 2023.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2021-03-02 16:54+0000\n"
+"PO-Revision-Date: 2023-02-01 16:48+0000\n"
 "Last-Translator: Diego José Macêdo <diegojmacedo@gmail.com>\n"
 "Language-Team: Portuguese (Brazil) <http://translate.pkp.sfu.ca/projects/"
 "plugins/swordServer/pt_BR/>\n"
@@ -9,10 +10,17 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 3.9.1\n"
+"X-Generator: Weblate 4.13.1\n"
 
 msgid "plugins.gateways.swordserver.description"
 msgstr "Uma API para aceitar depósitos SWORD"
 
 msgid "plugins.gateways.swordserver.displayName"
 msgstr "Plugin de servidor SWORD"
+
+msgid "plugins.gateways.swordserver.servicedocument"
+msgstr ""
+"<p>Depósitos SWORD podem ser feitos neste documento de serviço usando o URL "
+"do documento de serviço: <pre>{$serviceDocumentUrl}</pre></p>\n"
+"<p>Coleções específicas podem ser endereçadas por ID de seção. Por exemplo, "
+"para ID de seção 1: <pre>{$exampleDepositPointUrl}</pre></p>"
