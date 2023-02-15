@@ -1,8 +1,8 @@
 # Artashes Mirzoyan <amirzoyan@sci.am>, 2022.
-# Tigran Zargaryan <tigran@flib.sci.am>, 2022.
+# Tigran Zargaryan <tigran@flib.sci.am>, 2022, 2023.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2022-09-01 19:55+0000\n"
+"PO-Revision-Date: 2023-02-16 05:48+0000\n"
 "Last-Translator: Tigran Zargaryan <tigran@flib.sci.am>\n"
 "Language-Team: Armenian <http://translate.pkp.sfu.ca/projects/plugins/"
 "swordServer/hy_AM/>\n"
@@ -24,5 +24,5 @@ msgstr ""
 "<p>SWORD ավանդադրումները կարելի է կատարել այս ծառայության փաստաթղթում` "
 "օգտագործելով սպասարկման փաստաթղթի URL-ը` <pre>{$serviceDocumentUrl}</pre></p>"
 "\n"
-"<p>Ավանդադրման հատուկ կետերը կարող են հասցեագրվել բաժնի ID-ով: Օրինակ՝ բաժնի "
-"ID 1-ի համար՝ <pre>{$exampleDepositPointUrl}</pre></p>"
+"<p>Հատուկ հավաքածուները կարող են հասցեագրվել բաժնի ID-ով: Օրինակ՝ բաժնի ID 1-"
+"ի համար՝ <pre>{$exampleDepositPointUrl}</pre></p>"
