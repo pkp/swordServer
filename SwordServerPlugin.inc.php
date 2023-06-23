@@ -346,7 +346,7 @@ class SwordServerPlugin extends GatewayPlugin {
 
 						header('Content-Type: application/xml');
 						header('HTTP/1.1 500 Not ServerError');
-						header('Allow ' . implode($methodsAllowed, ', '));
+						header('Allow ' . implode(', ', $methodsAllowed));
 						echo $swordError->saveXML();
 						exit;
 					}
