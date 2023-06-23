@@ -1,6 +1,6 @@
 <?php
 /**
- * @file SwordServerAccessPolicy.inc.php
+ * @file SwordServerAccessPolicy.php
  *
  * Copyright (c) 2014-2021 Simon Fraser University
  * Copyright (c) 2000-2021 John Willinsky
@@ -10,7 +10,17 @@
  * @brief Class to that makes sure that a user is logged in.
  */
 
+namespace APP\plugins\gateways\swordServer;
+
 use \Firebase\JWT\JWT;
+
+use PKP\security\authorization\AuthorizationPolicy;
+use PKP\security\Validation;
+use PKP\db\DAORegistry;
+use PKP\core\Registry;
+use PKP\security\Role;
+
+use APP\facades\Repo;
 
 class SwordServerAccessPolicy extends AuthorizationPolicy {
 
@@ -50,8 +60,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 			$userPass = base64_decode(substr($auth_header, 6));
 			$userPass = explode(":", $userPass);
 			if (Validation::checkCredentials($userPass[0], $userPass[1])) {
-				$userDao = DAORegistry::getDAO('UserDAO');
-				$user = $userDao->getByUsername($userPass[0]);
+				$user = Repo::user()->getByUsername($userPass[0]);
 				Registry::set('user', $user);
 			}
 		}
@@ -73,7 +82,7 @@ class SwordServerAccessPolicy extends AuthorizationPolicy {
 			}
 		}
 
-		if ($user && $user->hasRole(ROLE_ID_AUTHOR, $this->request->getJournal()->getId())) {
+		if ($user && $user->hasRole(Role::ROLE_ID_AUTHOR, $this->request->getJournal()->getId())) {
 			$this->addAuthorizedContextObject(ASSOC_TYPE_USER, $user);
 			return AUTHORIZATION_PERMIT;
 		}

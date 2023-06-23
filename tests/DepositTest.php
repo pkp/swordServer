@@ -40,7 +40,7 @@ class DepositTest extends PHPUnit\Framework\TestCase
 			'http://purl.org/net/sword/package/METSDSpaceSIP',
 			'application/zip', false, true
 		);
-		if(is_a($response, "SWORDAPPErrorDocument")) {
+		if($response instanceof \SWORDAPPErrorDocument) {
 				throw new Exception($response->toString());
 		}
 		// DepositReceipt

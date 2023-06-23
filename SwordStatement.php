@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file SwordStatement.inc.php
+ * @file SwordStatement.php
  *
  * Copyright (c) 2014-2021 Simon Fraser University
  * Copyright (c) 2003-2021 John Willinsky
@@ -11,7 +11,9 @@
  * @brief Sword gateway plugin
  */
 
-class SwordStatement extends DOMDocument {
+namespace APP\plugins\gateways\swordServer;
+
+class SwordStatement extends \DOMDocument {
 
 	/**
 	 * Constructor.

@@ -1,5 +1,5 @@
 {**
- * plugins/generic/webFeed/templates/block.tpl
+ * plugins/gateways/swordServer/templates/block.tpl
  *
  * Copyright (c) 2014-2021 Simon Fraser University
  * Copyright (c) 2003-2021 John Willinsky

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file SwordServerSettingsForm.inc.php
+ * @file SwordServerSettingsForm.php
  *
  * Copyright (c) 2014-2022 Simon Fraser University
  * Copyright (c) 2003-2022 John Willinsky
@@ -11,7 +11,13 @@
  * @brief Form for managers to modify sword server plugin settings
  */
 
-import('lib.pkp.classes.form.Form');
+namespace APP\plugins\gateways\swordServer;
+
+use PKP\form\Form;
+use PKP\form\validation\FormValidatorPost;
+use PKP\form\validation\FormValidatorCSRF;
+
+use APP\template\TemplateManager;
 
 class SwordServerSettingsForm extends Form {
 

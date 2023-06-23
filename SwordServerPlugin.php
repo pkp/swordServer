@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file SwordServerPlugin.inc.php
+ * @file SwordServerPlugin.php
  *
  * Copyright (c) 2014-2021 Simon Fraser University
  * Copyright (c) 2003-2021 John Willinsky
@@ -11,16 +11,32 @@
  * @brief Sword gateway plugin
  */
 
-import('lib.pkp.classes.plugins.GatewayPlugin');
-import('lib.pkp.classes.security.authorization.PolicySet');
-import('lib.pkp.classes.submission.Genre');
-import('classes.publication.Publication');
+namespace APP\plugins\gateways\swordServer;
 
-require __DIR__ . '/ServiceDocument.inc.php';
-require __DIR__ . '/DepositReceipt.inc.php';
-require __DIR__ . '/SwordStatement.inc.php';
-require __DIR__ . '/SwordServerAccessPolicy.inc.php';
-require __DIR__ . '/SwordError.inc.php';
+use PKP\plugins\GatewayPlugin;
+use PKP\security\authorization\PolicySet;
+use PKP\submission\Genre;
+use PKP\linkAction\request\AjaxModal;
+use PKP\linkAction\LinkAction;
+use PKP\core\JSONMessage;
+use PKP\db\DAORegistry;
+use PKP\security\Role;
+use PKP\core\Core;
+use PKP\submission\PKPSubmission;
+use PKP\submissionFile\SubmissionFile;
+
+use APP\facades\Repo;
+use APP\publication\Publication;
+use APP\core\Application;
+use APP\notification\NotificationManager;
+use APP\core\Services;
+
+use APP\plugins\gateways\swordServer\ServiceDocument;
+use APP\plugins\gateways\swordServer\DepositReceipt;
+use APP\plugins\gateways\swordServer\SwordStatement;
+use APP\plugins\gateways\swordServer\SwordServerAccessPolicy;
+use APP\plugins\gateways\swordServer\SwordError;
+use APP\plugins\gateways\swordServer\SwordServerSettingsForm;
 
 class SwordServerPlugin extends GatewayPlugin {
 
@@ -100,9 +116,7 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	function serviceDocument() {
 		$journal = $this->request->getJournal();
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$resultSet = $sectionDao->getByJournalId($journal->getId());
-		$sections = $resultSet->toAssociativeArray();
+		$sections = iterator_to_array(Repo::section()->getCollector()->filterByContextIds([$journal->getId()])->getMany(), true);
 
 		// Exclude inactive sections
 		$sections = array_filter($sections, function($section) {
@@ -131,20 +145,18 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * @param $opts array
 	 */
 	function deposit($opts) {
-		$locale = Locale::getDefault();
 		$journal = $this->request->getJournal();
+		$locale = $journal->getPrimaryLocale();
 		$user = $this->request->getUser();
 
 		// Validate and fetch the target section for this deposit.
-		$sectionDao = Application::getSectionDAO();
-		$section = $sectionDao->getById(intval($opts['id']), $journal->getId());
+		$section = Repo::section()->get(intval($opts['id']), $journal->getId());
 		$isManager = $user->hasRole(ROLE_ID_MANAGER, $journal->getId());
 		if (!$section || $section->getIsInactive() || (!$isManager && $section->getEditorRestricted())) {
 			throw new Exception('Unable to determine target section!');
 		}
 
-		$userGroupDao = DAORegistry::getDAO('UserGroupDAO');
-		$authorUserGroup = $userGroupDao->getDefaultByRoleId($journal->getId(), ROLE_ID_AUTHOR);
+		$authorUserGroup = Repo::userGroup()->getCollector()->filterByContextIds([$journal->getId()])->filterByIsDefault(true)->filterByRoleIds([Role::ROLE_ID_AUTHOR])->getMany()->first();
 		if (!$authorUserGroup) throw new Exception('Unable to determine author user group!');
 
 		// Save the sword package to a local file.
@@ -153,7 +165,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$zipPath = tempnam(sys_get_temp_dir(), 'sword');
 		$zipContents = file_get_contents('php://input');
 		file_put_contents($zipPath, $zipContents);
-		$zip = new ZipArchive;
+		$zip = new \ZipArchive;
 		if (!$zip->open($zipPath)) throw new Exception('Unable to open zip file.');
 
 		// Load the metadata from the package.
@@ -164,9 +176,13 @@ class SwordServerPlugin extends GatewayPlugin {
 		$metsDoc->registerXPathNamespace('epdcx', "http://purl.org/eprint/epdcx/2006-11-16/");
 		$metsDoc->registerXPathNamespace('mods', "http://www.loc.gov/mods/v3");
 
+		// Populate a Publication object
+		$publication = Repo::publication()->newDataObject();
+		$publication->setData('sectionId', $section->getId());
+		$publication->setData('status', PKPSubmission::STATUS_QUEUED);
+
 		// Populate a Submission object
-		$submissionDao = Application::getSubmissionDAO();
-		$submission = $submissionDao->newDataObject();
+		$submission = Repo::submission()->newDataObject();
 		$submission->setContextId($journal->getId());
 		$submission->setDateSubmitted (Core::getCurrentDate());
 		$submission->setLastModified (Core::getCurrentDate());
@@ -175,13 +191,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setLocale($locale);
 		$submission->setStatus(STATUS_QUEUED);
 		$submission->setContextId($journal->getId());
-		$submission = Services::get('submission')->add($submission, $this->request);
-
-		// Populate a Publication object
-		$publication = DAORegistry::getDAO('PublicationDAO')->newDataObject();
-		$publication->setData('submissionId', $submission->getId());
-		$publication->setData('sectionId', $section->getId());
-		$publication->setData('status', STATUS_QUEUED);
+		Repo::submission()->add($submission, $publication, $journal);
 
 		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/elements/1.1/title']/epdcx:valueString");
 		if (!empty($match)) {
@@ -192,10 +202,10 @@ class SwordServerPlugin extends GatewayPlugin {
 			$publication->setData('abstract', $match[0]->__toString(), $locale);
 		}
 		$publication->setData('locale', $locale);
-		$publication = Services::get('publication')->add($publication, $this->request);
+		Repo::publication()->add($publication);
 
 		// Set the current submission publication to the new publication object.
-		$submission = Services::get('submission')->edit($submission, ['currentPublicationId' => $publication->getId()], $this->request);
+		Repo::submission()->edit($submission, ['currentPublicationId' => $publication->getId()]);
 
 		// Assign the user author to the stage
 		$stageAssignmentDao = DAORegistry::getDAO('StageAssignmentDAO');
@@ -203,7 +213,6 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		// Store the list of authors.
 		$nameNodes = $metsDoc->xpath("//mods:name[mods:role/mods:roleTerm='author' or mods:role/mods:roleTerm='pkp_primary_contact']");
-		$authorDao = DAORegistry::getDAO('AuthorDAO');
 		$i = 0;
 		foreach ($nameNodes as $nameNode) {
 			$nameNode->registerXPathNamespace('mods', 'http://www.loc.gov/mods/v3');
@@ -212,7 +221,7 @@ class SwordServerPlugin extends GatewayPlugin {
 			$family = $nameNode->xpath("mods:namePart[@type='family']");
 			$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
 			if (!empty($email) && (!empty($given) || !empty($family))) {
-				$author = $authorDao->newDataObject();
+				$author = Repo::author()->newDataObject();
 				$author->setEmail($email[0]->__toString());
 				$author->setSequence(++$i);
 				$author->setData('publicationId', $publication->getId());
@@ -221,9 +230,9 @@ class SwordServerPlugin extends GatewayPlugin {
 				if ($family) $author->setData('familyName', $family[0]->__toString(), $locale);
 				if ($given) $author->setData('givenName', $given[0]->__toString(), $locale);
 
-				$author = Services::get('author')->add($author, $this->request);
+				Repo::author()->add($author);
 
-				if ($primary) $publication = Services::get('publication')->edit($publication, ['primaryContactId' => $author->getId()], $this->request);
+				if ($primary) Repo::publication()->edit($publication, ['primaryContactId' => $author->getId()]);
 			}
 		}
 
@@ -270,8 +279,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$genre = DAORegistry::getDAO('GenreDAO')->getByKey('OTHER', $this->request->getJournal()->getId());
 		if (!$genre) throw new Exception('Could not find genre with key OTHER for SWORD deposit!');
 
-		$submissionFileService = Services::get('submissionFile');
-		$submissionDir = Services::get('submissionFile')->getSubmissionDir($submission->getData('contextId'), $submission->getId());
+		$submissionDir = Repo::submissionFile()->getSubmissionDir($submission->getData('contextId'), $submission->getId());
 		$fileService = Services::get('file');
 		$info = pathinfo($targetFilename);
 		$newFileId = $fileService->add(
@@ -280,7 +288,6 @@ class SwordServerPlugin extends GatewayPlugin {
 		);
 
 		// Add a submission file entry
-		import('lib.pkp.classes.submission.SubmissionFile');
 		$submissionFile = new SubmissionFile();
 		$submissionFile->setData('fileStage', SUBMISSION_FILE_SUBMISSION);
 		$submissionFile->setData('viewable', true);
@@ -289,7 +296,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submissionFile->setData('name', $targetFilename, $locale);
 		$submissionFile->setData('genreId', $genre->getId());
 
-		return Services::get('submissionFile')->add($submissionFile, $this->request);
+		return Repo::submissionFile()->add($submissionFile);
 	}
 
 	/**
@@ -299,15 +306,13 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	function statement($opts) {
 		$locale = Locale::getDefault();
-		$submissionDao = Application::getSubmissionDAO();
-		$submission = $submissionDao->getById($opts['id']);
+		$submission = Repo::submission()->get($opts['id']);
 
 		// Ensure that the requested submission is in the appropriate journal
 		if ($submission->getContextId() != $this->getRequest()->getJournal()->getId()) {
 			throw new Exception('The specified submission is not allowed!');
 		}
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$section = $sectionDao->getById($submission->getSectionId());
+		$section = Repo::section()->get($submission->getSectionId());
 		$swordStatement = new SwordStatement(
 			[
 				'state_href' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId(), 'statement']),
@@ -410,7 +415,6 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	public function getActions($request, $verb) {
 		$router = $request->getRouter();
-		import('lib.pkp.classes.linkAction.request.AjaxModal');
 		return array_merge(
 			$this->getEnabled()?array(
 				new LinkAction(
@@ -433,8 +437,6 @@ class SwordServerPlugin extends GatewayPlugin {
 	public function manage($args, $request) {
 		switch ($request->getUserVar('verb')) {
 			case 'settings':
-				AppLocale::requireComponents(LOCALE_COMPONENT_APP_COMMON,  LOCALE_COMPONENT_PKP_MANAGER);
-				$this->import('SwordServerSettingsForm');
 				$form = new SwordServerSettingsForm($this, $request->getContext()->getId());
 
 				if ($request->getUserVar('save')) {

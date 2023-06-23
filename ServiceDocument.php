@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file ServiceDocument.inc.php
+ * @file ServiceDocument.php
  *
  * Copyright (c) 2014-2021 Simon Fraser University
  * Copyright (c) 2003-2021 John Willinsky
@@ -11,7 +11,9 @@
  * @brief Sword gateway plugin
  */
 
-class ServiceDocument extends DOMDocument {
+namespace APP\plugins\gateways\swordServer;
+
+class ServiceDocument extends \DOMDocument {
 
 	/**
 	 * Constructor
@@ -31,12 +33,12 @@ class ServiceDocument extends DOMDocument {
 		$workspace->appendChild($this->createElement('atom:title', $journal->getLocalizedPageHeaderTitle()));
 		foreach ($sections as $key => $section) {
 			$collection = $this->createElement('collection');
-			$href_attr = new DOMAttr('href', $baseUrl . "/sections/" . $section->_data['id']);
+			$href_attr = new \DOMAttr('href', $baseUrl . "/sections/" . $section->_data['id']);
 			$collection->appendChild($href_attr);
 			$collection->appendChild($this->createElement('atom:title', $section->getLocalizedTitle()));
 			$collection->appendChild($this->createElement('accept', '*/*'));
 			$accept2 = $this->createElement('accept', '*/*');
-			$accept2_attr = new DOMAttr('alternate', 'multipart-related');
+			$accept2_attr = new \DOMAttr('alternate', 'multipart-related');
 			$accept2->appendChild($accept2_attr);
 			$collection->appendChild($accept2);
 			$workspace->appendChild($collection);
