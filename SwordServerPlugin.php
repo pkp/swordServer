@@ -115,7 +115,7 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * Serve a SWORD Service Document
 	 */
 	function serviceDocument() {
-		$journal = $this->request->getJournal();
+		$journal = $this->request->getContext();
 		$sections = iterator_to_array(Repo::section()->getCollector()->filterByContextIds([$journal->getId()])->getMany(), true);
 
 		// Exclude inactive sections
@@ -145,7 +145,7 @@ class SwordServerPlugin extends GatewayPlugin {
 	 * @param $opts array
 	 */
 	function deposit($opts) {
-		$journal = $this->request->getJournal();
+		$journal = $this->request->getContext();
 		$locale = $journal->getPrimaryLocale();
 		$user = $this->request->getUser();
 
@@ -183,14 +183,13 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		// Populate a Submission object
 		$submission = Repo::submission()->newDataObject();
-		$submission->setContextId($journal->getId());
-		$submission->setDateSubmitted (Core::getCurrentDate());
-		$submission->setLastModified (Core::getCurrentDate());
-		$submission->setSubmissionProgress($isManager ? 0 : 1); // Force non-editor users to review submission steps.
-		$submission->setStageId(WORKFLOW_STAGE_ID_SUBMISSION);
-		$submission->setLocale($locale);
-		$submission->setStatus(STATUS_QUEUED);
-		$submission->setContextId($journal->getId());
+		$submission->setData('contextId', $journal->getId());
+		$submission->setData('dateSubmitted', Core::getCurrentDate());
+		$submission->stampModified();
+		$submission->setData('submissionProgress', $isManager ? 0 : 1); // Force non-editor users to review submission steps.
+		$submission->setData('stageId', WORKFLOW_STAGE_ID_SUBMISSION);
+		$submission->setData('locale', $locale);
+		$submission->setData('status', STATUS_QUEUED);
 		Repo::submission()->add($submission, $publication, $journal);
 
 		$match = $metsDoc->xpath("//epdcx:statement[@epdcx:propertyURI='http://purl.org/dc/elements/1.1/title']/epdcx:valueString");
@@ -257,7 +256,7 @@ class SwordServerPlugin extends GatewayPlugin {
 
 		// Create and send the deposit receipt
 		$depositReceipt = new DepositReceipt([
-			'title' => $submission->getTitle($locale),
+			'title' => $publication->getData('title', $locale),
 			'edit-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId()]),
 			'stmt-iri' => $this->request->getRouter()->url($this->request, null, null, null, ['swordServer', 'submissions', $submission->getId(), 'statement']),
 			'alternateLink' => $this->request->getRouter()->url($this->request, null, 'submission', 'wizard', [1], ['submissionId' => $submission->getId()]),
@@ -309,7 +308,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission = Repo::submission()->get($opts['id']);
 
 		// Ensure that the requested submission is in the appropriate journal
-		if ($submission->getContextId() != $this->getRequest()->getJournal()->getId()) {
+		if ($submission->getData('contextId') != $this->getRequest()->getContext()->getId()) {
 			throw new Exception('The specified submission is not allowed!');
 		}
 		$section = Repo::section()->get($submission->getSectionId());
