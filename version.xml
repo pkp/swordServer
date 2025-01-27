@@ -16,4 +16,5 @@
 	<lazy-load>1</lazy-load>
 	<release>1.1.0.0</release>
 	<date>2021-02-26</date>
+	<class>SwordServerPlugin</class>
 </version>
