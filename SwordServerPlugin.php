@@ -454,3 +454,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		return parent::manage($args, $request);
 	}
 }
+
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\plugins\gateways\swordServer\SwordServerPlugin', '\SwordServerPlugin');
+}
