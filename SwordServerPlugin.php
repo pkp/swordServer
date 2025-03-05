@@ -275,8 +275,8 @@ class SwordServerPlugin extends GatewayPlugin {
 	 */
 	protected function _addFile($submission, $localFilename, $targetFilename, $locale) {
 		// Identify a genre for uploaded files.
-		$genre = DAORegistry::getDAO('GenreDAO')->getByKey('OTHER', $this->request->getJournal()->getId());
-		if (!$genre) throw new Exception('Could not find genre with key OTHER for SWORD deposit!');
+		$genre = DAORegistry::getDAO('GenreDAO')->getByKey('SUBMISSION', $this->request->getJournal()->getId());
+		if (!$genre) throw new Exception('Could not find genre with key SUBMISSION for SWORD deposit!');
 
 		$submissionDir = Repo::submissionFile()->getSubmissionDir($submission->getData('contextId'), $submission->getId());
 		$fileService = Services::get('file');
@@ -291,6 +291,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submissionFile->setData('fileStage', SUBMISSION_FILE_SUBMISSION);
 		$submissionFile->setData('viewable', true);
 		$submissionFile->setData('fileId', $newFileId);
+		$submissionFile->setData('uploaderUserId', $this->user->getId());
 		$submissionFile->setData('submissionId', $submission->getId());
 		$submissionFile->setData('name', $targetFilename, $locale);
 		$submissionFile->setData('genreId', $genre->getId());
