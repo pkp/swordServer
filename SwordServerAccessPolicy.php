@@ -16,7 +16,6 @@ use \Firebase\JWT\JWT;
 
 use PKP\security\authorization\AuthorizationPolicy;
 use PKP\security\Validation;
-use PKP\db\DAORegistry;
 use PKP\core\Registry;
 use PKP\security\Role;
 
