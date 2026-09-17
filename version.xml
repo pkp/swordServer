@@ -14,7 +14,7 @@
 	<application>swordServer</application>
 	<type>plugins.gateways</type>
 	<lazy-load>1</lazy-load>
-	<release>1.1.0.1</release>
-	<date>2025-03-04</date>
+	<release>1.1.0.2</release>
+	<date>2026-09-17</date>
 	<class>SwordServerPlugin</class>
 </version>
