@@ -219,19 +219,25 @@ class SwordServerPlugin extends GatewayPlugin {
 			$given = $nameNode->xpath("mods:namePart[@type='given']");
 			$family = $nameNode->xpath("mods:namePart[@type='family']");
 			$primary = $nameNode->xpath("mods:role[mods:roleTerm='pkp_primary_contact']");
-			if (!empty($email) && (!empty($given) || !empty($family))) {
+			if (!empty($given) || !empty($family)) {
 				$author = Repo::author()->newDataObject();
-				$author->setEmail($email[0]->__toString());
+				if (!empty($email)) { 
+					$author->setEmail($email[0]->__toString() ?: null);
+				}
 				$author->setSequence(++$i);
 				$author->setData('publicationId', $publication->getId());
 				$author->setUserGroupId($authorUserGroup->getId());
 				$author->setIncludeInBrowse(true);
-				if ($family) $author->setData('familyName', $family[0]->__toString(), $locale);
-				if ($given) $author->setData('givenName', $given[0]->__toString(), $locale);
-
+				if ($family) { 
+					$author->setData('familyName', $family[0]->__toString(), $locale);
+				}
+				if ($given) { 
+					$author->setData('givenName', $given[0]->__toString(), $locale);
+				}
 				Repo::author()->add($author);
-
-				if ($primary) Repo::publication()->edit($publication, ['primaryContactId' => $author->getId()]);
+				if ($primary) {
+					Repo::publication()->edit($publication, ['primaryContactId' => $author->getId()]);
+				}
 			}
 		}
 
