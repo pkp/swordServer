@@ -186,7 +186,7 @@ class SwordServerPlugin extends GatewayPlugin {
 		$submission->setData('contextId', $journal->getId());
 		$submission->setData('dateSubmitted', Core::getCurrentDate());
 		$submission->stampModified();
-		$submission->setData('submissionProgress', $isManager ? 0 : 1); // Force non-editor users to review submission steps.
+		$submission->setData('submissionProgress', $isManager ? '' : 'start'); // Force non-editor users to review submission steps.
 		$submission->setData('stageId', WORKFLOW_STAGE_ID_SUBMISSION);
 		$submission->setData('locale', $locale);
 		$submission->setData('status', STATUS_QUEUED);
