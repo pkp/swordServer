@@ -226,12 +226,16 @@ class SwordServerPlugin extends GatewayPlugin {
 				$author->setData('publicationId', $publication->getId());
 				$author->setUserGroupId($authorUserGroup->getId());
 				$author->setIncludeInBrowse(true);
-				if ($family) $author->setData('familyName', $family[0]->__toString(), $locale);
-				if ($given) $author->setData('givenName', $given[0]->__toString(), $locale);
-
+				if ($family) {
+					$author->setData('familyName', $family[0]->__toString(), $locale);
+				}
+				if ($given) {
+					$author->setData('givenName', $given[0]->__toString(), $locale);
+				}
 				Repo::author()->add($author);
-
-				if ($primary) Repo::publication()->edit($publication, ['primaryContactId' => $author->getId()]);
+				if ($primary) {
+					Repo::publication()->edit($publication, ['primaryContactId' => $author->getId()]);
+				}
 			}
 		}
 
